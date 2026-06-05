@@ -1,0 +1,6 @@
+{
+  "name": "Atacadão - ISV & Gestão de Estoque",
+  "description": "Sistema corporativo profissional para gestão diária de ISVs, fornecedores, promotores, agências e controle de estoque de produtos da filial 172 - Cascavel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

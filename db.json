@@ -1,0 +1,15 @@
+{
+  "products": [],
+  "suppliers": [],
+  "promoters": [],
+  "agencies": [],
+  "supHistory": [],
+  "impHistory": [],
+  "currentUser": {
+    "id": "1",
+    "name": "Filial 172 Cascavel",
+    "role": "Admin",
+    "email": "danilo.gerencia@atacadao.com.br"
+  },
+  "lastUpdateTime": "2026-06-05T10:47:00Z"
+}

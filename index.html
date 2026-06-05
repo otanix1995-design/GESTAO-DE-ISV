@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atacadão - ISV & Gestão de Estoque</title>
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        var errDiv = document.createElement('div');
+        errDiv.style.position = 'fixed';
+        errDiv.style.top = '0';
+        errDiv.style.left = '0';
+        errDiv.style.width = '100vw';
+        errDiv.style.height = '100vh';
+        errDiv.style.backgroundColor = '#FFF0F0';
+        errDiv.style.color = '#C00';
+        errDiv.style.padding = '24px';
+        errDiv.style.fontFamily = 'monospace';
+        errDiv.style.zIndex = '99999';
+        errDiv.style.overflowY = 'auto';
+        errDiv.style.boxSizing = 'border-box';
+        
+        var title = document.createElement('h2');
+        title.innerText = 'Erro Crítico no Carregamento da Aplicação (window.onerror):';
+        title.style.marginTop = '0';
+        errDiv.appendChild(title);
+        
+        var errMsg = document.createElement('p');
+        errMsg.innerText = message + ' em ' + source + ':' + lineno + ':' + colno;
+        errMsg.style.fontSize = '16px';
+        errMsg.style.fontWeight = 'bold';
+        errDiv.appendChild(errMsg);
+        
+        if (error && error.stack) {
+          var stackTrace = document.createElement('pre');
+          stackTrace.innerText = error.stack;
+          stackTrace.style.background = '#F9F9F9';
+          stackTrace.style.padding = '12px';
+          stackTrace.style.border = '1px solid #FFCCCC';
+          stackTrace.style.borderRadius = '6px';
+          stackTrace.style.overflowX = 'auto';
+          errDiv.appendChild(stackTrace);
+        }
+        
+        document.body.appendChild(errDiv);
+        return false;
+      };
+
+      window.onunhandledrejection = function(event) {
+        var errDiv = document.createElement('div');
+        errDiv.style.position = 'fixed';
+        errDiv.style.top = '0';
+        errDiv.style.left = '0';
+        errDiv.style.width = '100vw';
+        errDiv.style.height = '100vh';
+        errDiv.style.backgroundColor = '#FFF0F0';
+        errDiv.style.color = '#C00';
+        errDiv.style.padding = '24px';
+        errDiv.style.fontFamily = 'monospace';
+        errDiv.style.zIndex = '99999';
+        errDiv.style.overflowY = 'auto';
+        errDiv.style.boxSizing = 'border-box';
+        
+        var title = document.createElement('h2');
+        title.innerText = 'Rejeição de Promessa Não Tratada (onunhandledrejection):';
+        title.style.marginTop = '0';
+        errDiv.appendChild(title);
+        
+        var errMsg = document.createElement('p');
+        errMsg.innerText = String(event.reason);
+        errMsg.style.fontSize = '16px';
+        errMsg.style.fontWeight = 'bold';
+        errDiv.appendChild(errMsg);
+        
+        if (event.reason && event.reason.stack) {
+          var stackTrace = document.createElement('pre');
+          stackTrace.innerText = event.reason.stack;
+          stackTrace.style.background = '#F9F9F9';
+          stackTrace.style.padding = '12px';
+          stackTrace.style.border = '1px solid #FFCCCC';
+          stackTrace.style.borderRadius = '6px';
+          stackTrace.style.overflowX = 'auto';
+          errDiv.appendChild(stackTrace);
+        }
+        
+        document.body.appendChild(errDiv);
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
