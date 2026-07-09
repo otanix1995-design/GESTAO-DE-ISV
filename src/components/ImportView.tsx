@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { Product, Supplier, User, ImportHistoryEntry } from '../types';
 import { 
   FileSpreadsheet, 
@@ -227,6 +228,92 @@ export default function ImportView({
     status: 'idle',
     message: ''
   });
+
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (file: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Get the worksheet as a 2D array of strings/numbers
+        const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+        
+        if (!json || json.length === 0) {
+          setImportLog({
+            status: 'error',
+            message: 'Não foi possível encontrar dados válidos na primeira aba do arquivo Excel.'
+          });
+          return;
+        }
+        
+        // Convert the 2D array into a tab-separated text block to fill the text-area and reuse the existing parsing logic
+        const stringRows = json
+          .map(row => row.map(cell => {
+            if (cell === null || cell === undefined) return '';
+            const str = String(cell).trim();
+            return str;
+          }).join('\t'))
+          .filter(rowText => rowText.replace(/\t/g, '').trim().length > 0); // Skip empty rows
+
+        const textData = stringRows.join('\n');
+        setPasteData(textData);
+        setImportLog({
+          status: 'success',
+          message: `Planilha "${file.name}" carregada com sucesso! ${json.length} linhas importadas e coladas abaixo para revisão. Confira os dados mapeados e clique em "Importar e Sincronizar" no final.`
+        });
+      } catch (error: any) {
+        console.error(error);
+        setImportLog({
+          status: 'error',
+          message: `Erro ao ler a planilha Excel: ${error.message || 'Formato de arquivo corrompido ou incompatível.'}`
+        });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (!isAdmin) return;
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        handleFileUpload(file);
+      } else {
+        setImportLog({
+          status: 'error',
+          message: 'Tipo de arquivo inválido. Por favor, envie uma planilha do Excel (.xlsx, .xls) ou arquivo separado por vírgulas (.csv).'
+        });
+      }
+    }
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFileUpload(e.target.files[0]);
+    }
+  };
 
   // Delimited templates that users can easily copy-paste or pre-fill with a button
   const ESTOQUE_TEMPLATE = 
@@ -587,6 +674,54 @@ export default function ImportView({
             </div>
           </div>
 
+          {/* File Upload Area */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+              <UploadCloud className="w-4 h-4 text-[#F58220]" /> Importar de Arquivo de Planilha (Excel ou CSV):
+            </label>
+            
+            <div
+              onDragEnter={handleDrag}
+              onDragOver={handleDrag}
+              onDragLeave={handleDrag}
+              onDrop={handleDrop}
+              onClick={() => isAdmin && fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2.5 ${
+                dragActive 
+                  ? 'border-[#F58220] bg-[#F58220]/5 shadow-inner' 
+                  : 'border-gray-200 hover:border-[#F58220]/50 bg-gray-50/50 hover:bg-gray-50'
+              } ${!isAdmin ? 'opacity-55 cursor-not-allowed' : ''}`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileInput}
+                accept=".xlsx, .xls, .csv"
+                className="hidden"
+                disabled={!isAdmin}
+              />
+              
+              <div className="p-3 bg-white rounded-full shadow-xs border border-gray-100">
+                <FileSpreadsheet className="w-6 h-6 text-[#F58220]" />
+              </div>
+              
+              <div className="text-xs leading-relaxed">
+                {isAdmin ? (
+                  <>
+                    <p className="font-bold text-gray-700">
+                      Arraste e solte o arquivo aqui ou <span className="text-[#F58220] underline font-extrabold">clique para selecionar</span>
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-1 font-mono">
+                      Formatos aceitos: Microsoft Excel (.xlsx, .xls) ou texto formatado (.csv)
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-gray-500 font-medium">Faça login como Administrador para habilitar a importação de planilhas.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Clipboard Textarea */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
@@ -673,7 +808,7 @@ export default function ImportView({
               <HelpCircle className="w-4 h-4 text-[#F58220]" /> Estrutura do Excel
             </h3>
             <p className="text-xs text-gray-500 leading-relaxed">
-              O importador reconhecerá automaticamente formatos com tabulação do Excel (copiar da tabela e colar), além de divisores por vírgula ou ponto-e-vírgula em formato CSV padrão.
+              O importador reconhecerá automaticamente planilhas do Excel (.xlsx, .xls) e arquivos CSV enviados por drag-and-drop ou selecionados diretamente, além do método tradicional de copiar e colar dados da tabela.
             </p>
 
             <div className="bg-gray-50 p-3 rounded-lg border text-[11px] font-mono text-gray-600 space-y-1">
