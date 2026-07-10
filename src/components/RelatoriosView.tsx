@@ -20,7 +20,8 @@ import {
   Grid,
   CheckCircle,
   HelpCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ArrowUpDown
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -33,7 +34,7 @@ interface RelatoriosViewProps {
   stats: SystemStats;
 }
 
-type ReportType = 'promotor' | 'industria' | 'agencia' | 'gerencial';
+type ReportType = 'isv' | 'promotor' | 'industria' | 'agencia' | 'gerencial';
 
 export default function RelatoriosView({
   products,
@@ -47,9 +48,7 @@ export default function RelatoriosView({
   const isManagerOrAdmin = currentUser.role === 'Admin' || currentUser.role === 'Gestor';
 
   // State
-  const [activeReport, setActiveReport] = useState<ReportType>(
-    isManagerOrAdmin ? 'gerencial' : 'promotor'
-  );
+  const [activeReport, setActiveReport] = useState<ReportType>('isv');
   const [selectedDate, setSelectedDate] = useState('2026-06-04');
   
   // Custom Filters for each Report
@@ -58,7 +57,11 @@ export default function RelatoriosView({
   );
   const [reportIndustry, setReportIndustry] = useState('todos');
   const [reportAgency, setReportAgency] = useState('todos');
+  const [reportStatus, setReportStatus] = useState('todos');
   const [exportSuccessMessage, setExportSuccessMessage] = useState('');
+  
+  // Sorting state: 'none', 'estoqueDesc' (estoque maior para o menor), 'valorDesc' (valor do estoque maior para menor), 'semVendaDesc', 'codigo'
+  const [sortBy, setSortBy] = useState<'none' | 'estoqueDesc' | 'valorDesc' | 'semVendaDesc' | 'codigo'>('none');
 
   // Clear success notification after 3 seconds
   const triggerExportNotification = (message: string) => {
@@ -106,11 +109,34 @@ export default function RelatoriosView({
     };
   }, [products, productsDerived, suppliers, agencies]);
 
+  // Helper to toggle sorting field
+  const handleToggleSort = (field: 'estoqueDesc' | 'valorDesc' | 'semVendaDesc' | 'codigo') => {
+    if (sortBy === field) {
+      setSortBy('none');
+    } else {
+      setSortBy(field);
+    }
+  };
+
   // --- REPORT FILTER ENGINE ---
   const reportData = useMemo(() => {
     let result = [...productsDerived];
 
-    if (activeReport === 'promotor') {
+    if (activeReport === 'isv') {
+      // Detailed ISV report filters
+      if (reportPromoter !== 'todos' && reportPromoter !== '') {
+        result = result.filter(r => r.promotor.toLowerCase() === reportPromoter.toLowerCase());
+      }
+      if (reportIndustry !== 'todos') {
+        result = result.filter(r => r.product.cnpjIndustria === reportIndustry);
+      }
+      if (reportAgency !== 'todos') {
+        result = result.filter(r => r.agencia === reportAgency);
+      }
+      if (reportStatus !== 'todos') {
+        result = result.filter(r => r.classificacao.toLowerCase() === reportStatus.toLowerCase() || r.status.toLowerCase() === reportStatus.toLowerCase());
+      }
+    } else if (activeReport === 'promotor') {
       // 1. Filter by Promoter
       if (reportPromoter !== 'todos') {
         result = result.filter(r => r.promotor.toLowerCase() === reportPromoter.toLowerCase());
@@ -137,8 +163,19 @@ export default function RelatoriosView({
       }
     }
 
+    // Apply Sorting Options
+    if (sortBy === 'estoqueDesc') {
+      result.sort((a, b) => b.estoqueTotal - a.estoqueTotal);
+    } else if (sortBy === 'valorDesc') {
+      result.sort((a, b) => b.valorEstoque - a.valorEstoque);
+    } else if (sortBy === 'semVendaDesc') {
+      result.sort((a, b) => b.product.semVenda - a.product.semVenda);
+    } else if (sortBy === 'codigo') {
+      result.sort((a, b) => a.product.codigo.localeCompare(b.product.codigo));
+    }
+
     return result;
-  }, [activeReport, productsDerived, reportPromoter, reportIndustry, reportAgency, isPromotor, currentUser.promoterName]);
+  }, [activeReport, productsDerived, reportPromoter, reportIndustry, reportAgency, reportStatus, sortBy, isPromotor, currentUser.promoterName]);
 
   // Aggregate Metrics for Active Report Layout
   const reportSummary = useMemo(() => {
@@ -162,13 +199,28 @@ export default function RelatoriosView({
     };
   }, [reportData]);
 
-  // --- EXPORT TO EXCEL/CSV SIMULATOR ---
+  // --- EXPORT TO EXCEL/CSV BLOCKS ---
   const handleExportCSV = () => {
     let headers: string[] = [];
     let rows: string[][] = [];
     let filename = `relatorio_${activeReport}_${selectedDate}.csv`;
 
-    if (activeReport === 'promotor') {
+    if (activeReport === 'isv') {
+      headers = ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'VALOR ESTOQUE (R$)', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO'];
+      rows = reportData.map(d => [
+        d.product.codigo,
+        d.product.descricao,
+        d.product.embalagem,
+        d.product.estoqueEmb1.toString(),
+        d.product.estoqueEmb9.toString(),
+        d.estoqueTotal.toString(),
+        d.product.semVenda.toString(),
+        d.valorEstoque.toFixed(2),
+        d.nomeIndustria,
+        d.promotor,
+        d.classificacao
+      ]);
+    } else if (activeReport === 'promotor') {
       headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'SEM VENDA (DIAS)', 'STATUS'];
       rows = reportData.map(d => [
         d.product.codigo,
@@ -224,7 +276,7 @@ export default function RelatoriosView({
     const csvContent = "\uFEFF" + [
       [`REDE ATACADÃO S.A. - FILIAL 172 CASCAVEL - DATA EMISSÃO: ${new Date().toLocaleDateString('pt-BR')}`],
       [`RELATÓRIO OPERACIONAL: ${activeReport.toUpperCase()}`],
-      [`Filtros aplicados: Data: ${selectedDate} | Promotor: ${reportPromoter} | Indústria: ${reportIndustry} | Agência: ${reportAgency}`],
+      [`Filtros aplicados: Data: ${selectedDate} | Promotor: ${reportPromoter} | Indústria: ${reportIndustry} | Agência: ${reportAgency} | Status: ${reportStatus} | Ordenação: ${sortBy}`],
       [],
       headers,
       ...rows
@@ -248,14 +300,14 @@ export default function RelatoriosView({
   };
 
   return (
-    <div className="space-y-6" id="relatorios-tab">
+    <div className="space-y-6 animate-fade-in" id="relatorios-tab">
       
       {/* Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 font-display">Gerador de Relatórios e Exportação</h2>
-          <p className="text-xs text-gray-500 mt-1">
-            Gere planilhas operacionais e PDFs executivos para auditorias de ruptura de fardo, abastecimento de gôndole e balanços de ISV.
+          <h2 className="text-xl font-bold text-gray-900 font-display">Gerador de Relatórios e Auditorias</h2>
+          <p className="text-xs text-gray-500 mt-1 font-sans">
+            Gere planilhas detalhadas de ISV, acompanhamento de abastecimento e fardo, auditorias financeiras e PDFs prontos para impressão física.
           </p>
         </div>
       </div>
@@ -271,9 +323,20 @@ export default function RelatoriosView({
       {/* FILTER CONTROL PANEL */}
       <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs space-y-4">
         
-        {/* Menu/Report Selector Tabs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 bg-gray-50 p-1.5 rounded-xl border border-gray-200">
+        {/* Menu/Report Selector Tabs - Fully Responsive */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5 bg-gray-50 p-1.5 rounded-xl border border-gray-200">
           
+          <button
+            onClick={() => { setActiveReport('isv'); }}
+            className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeReport === 'isv' 
+                ? 'bg-[#F58220] text-white shadow-sm font-black' 
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Relatório ISV Detalhado
+          </button>
+
           <button
             onClick={() => { setActiveReport('promotor'); setReportPromoter(isPromotor ? currentUser.promoterName || '' : 'todos'); }}
             className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
@@ -282,7 +345,7 @@ export default function RelatoriosView({
                 : 'text-gray-500 hover:text-gray-900'
             }`}
           >
-            <Contact className="w-4 h-4" /> Relatório por Promotor
+            <Contact className="w-4 h-4" /> Por Promotor
           </button>
 
           <button
@@ -293,7 +356,7 @@ export default function RelatoriosView({
                 : 'text-gray-500 hover:text-gray-900'
             }`}
           >
-            <Building className="w-4 h-4" /> Relatório por Indústria
+            <Building className="w-4 h-4" /> Por Indústria
           </button>
 
           <button
@@ -304,13 +367,13 @@ export default function RelatoriosView({
                 : 'text-gray-500 hover:text-gray-900'
             }`}
           >
-            <Building2 className="w-4 h-4" /> Relatório por Agência
+            <Building2 className="w-4 h-4" /> Por Agência
           </button>
 
           <button
             onClick={() => { 
               if (!isManagerOrAdmin) {
-                alert('Acesso Restrito ao Relatório Gerencial: Somente Administradores ou Gestores possuem acesso aos demonstrativos financeiros de custos de estoque.');
+                alert('Acesso Restrito ao Relatório Gerencial: Somente Administradores ou Gestores possuem acesso aos demonstrativos de custos e valuation.');
                 return;
               }
               setActiveReport('gerencial'); 
@@ -323,16 +386,16 @@ export default function RelatoriosView({
                 : 'text-gray-500 hover:text-gray-900'
             }`}
           >
-            <LineChart className="w-4 h-4" /> Relatório Gerencial
+            <LineChart className="w-4 h-4" /> Financeiro Gerencial
           </button>
         </div>
 
         {/* Filters according to selected report */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-2">
           
           {/* Calendar Picker */}
           <div>
-            <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">DATA DE REFERÊNCIA</label>
+            <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">DATA DE REFERÊNCIA</label>
             <div className="relative">
               <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
               <input
@@ -344,10 +407,10 @@ export default function RelatoriosView({
             </div>
           </div>
 
-          {/* Promoter Select Option (Relevant to Promotor or Gerencial tabs) */}
-          {(activeReport === 'promotor' || activeReport === 'gerencial') && (
+          {/* Promoter Select Option */}
+          {(activeReport === 'isv' || activeReport === 'promotor' || activeReport === 'gerencial') && (
             <div>
-              <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">FILTRAR PROMOTOR</label>
+              <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">FILTRAR PROMOTOR</label>
               <select
                 disabled={isPromotor}
                 value={reportPromoter}
@@ -355,17 +418,18 @@ export default function RelatoriosView({
                 className="w-full px-3 py-2 bg-gray-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#F58220] text-gray-700"
               >
                 {!isPromotor && <option value="todos">Todos os Promotores</option>}
-                {filterList.promoters.map((p) => (
+                <option value="Sem Cadastro">Sem Promotor (Sem Cadastro)</option>
+                {filterList.promoters.filter(p => p !== 'Sem Cadastro').map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
             </div>
           )}
 
-          {/* Industry Selection Option (Relevant to Industria or Gerencial tabs) */}
-          {(activeReport === 'industria' || activeReport === 'gerencial') && (
+          {/* Industry Selection Option */}
+          {(activeReport === 'isv' || activeReport === 'industria' || activeReport === 'gerencial') && (
             <div>
-              <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">FILTRAR INDÚSTRIA (CNPJ)</label>
+              <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">FILTRAR INDÚSTRIA (RAZÃO SOCIAL)</label>
               <select
                 value={reportIndustry}
                 onChange={(e) => setReportIndustry(e.target.value)}
@@ -380,9 +444,9 @@ export default function RelatoriosView({
           )}
 
           {/* Agency Selection Option */}
-          {activeReport === 'agencia' && (
+          {(activeReport === 'isv' || activeReport === 'agencia') && (
             <div>
-              <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">SINDICALIZAR AGÊNCIA</label>
+              <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">FILTRAR AGÊNCIA</label>
               <select
                 value={reportAgency}
                 onChange={(e) => setReportAgency(e.target.value)}
@@ -396,19 +460,54 @@ export default function RelatoriosView({
             </div>
           )}
 
-          {/* Export and Print Buttons */}
-          <div className="sm:col-span-2 md:col-span-1 flex items-end gap-2 text-xs">
+          {/* Status Selection Option */}
+          {activeReport === 'isv' && (
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">FILTRAR STATUS / ALERTA</label>
+              <select
+                value={reportStatus}
+                onChange={(e) => setReportStatus(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#F58220] text-gray-700"
+              >
+                <option value="todos">Todos os Status</option>
+                <option value="Ruptura">Ruptura (Sem Estoque)</option>
+                <option value="Abastecer">Abastecer (Fardo OK, Gôndola Zerada)</option>
+                <option value="Atenção">Atenção (Gôndola OK, Fardo Zerado)</option>
+                <option value="Normal">Normal (Ambos Abastecidos)</option>
+                <option value="Possível Ajuste">Possível Ajuste (Valor Est. &lt; R$200)</option>
+              </select>
+            </div>
+          )}
+
+          {/* Sorting Option */}
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">ORDENAÇÃO OPERACIONAL</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="w-full px-3 py-2 bg-gray-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#F58220] text-gray-700"
+            >
+              <option value="none">Padrão (Sem Classificação)</option>
+              <option value="estoqueDesc">Estoque Total (Maior para Menor)</option>
+              <option value="valorDesc">Valor do Estoque (Maior para Menor)</option>
+              <option value="semVendaDesc">Dias Sem Venda (Maior para Menor)</option>
+              <option value="codigo">Código do Produto (Crescente)</option>
+            </select>
+          </div>
+
+          {/* Export and Print Action Buttons */}
+          <div className="col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-6 flex justify-end gap-3 pt-2 text-xs border-t border-gray-100 mt-2">
             <button
               onClick={handleExportCSV}
-              className="flex-1 py-2 border border-gray-200 text-gray-650 rounded-xl hover:bg-gray-50 font-bold transition-all flex items-center justify-center gap-1.5"
+              className="px-5 py-2.5 bg-white border border-gray-250 text-gray-700 rounded-xl hover:bg-gray-50 font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-500" /> Exportar Planilha
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Exportar Planilha Excel/CSV
             </button>
             <button
               onClick={handlePrintPDF}
-              className="flex-1 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-100 font-bold transition-all flex items-center justify-center gap-1.5"
+              className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
             >
-              <Printer className="w-4 h-4 text-indigo-600" /> Imprimir / PDF
+              <Printer className="w-4 h-4 text-white" /> Imprimir Relatório / Gerar PDF
             </button>
           </div>
 
@@ -417,7 +516,7 @@ export default function RelatoriosView({
       </div>
 
       {/* --- FORMAL PREVIEW SHEETS EMBEDDED PREVIEW AREA --- */}
-      {/* This area will render a gorgeous professional letter styled container mimicking standard A4 paper boundaries */}
+      {/* This area renders a gorgeous professional letter-styled container mimicking standard A4 paper boundaries */}
       <div className="bg-white border text-left rounded-3xl p-8 shadow-xs border-gray-100 space-y-6 printable-document relative overflow-hidden" id="report-print-pane">
         
         {/* Printable Watermarked Indicator */}
@@ -446,14 +545,15 @@ export default function RelatoriosView({
         </div>
 
         {/* Meta logs of Applied Filters */}
-        <div className="bg-gray-50 p-4 rounded-xl border border-gray-205 flex flex-wrap justify-between gap-4 text-xs">
+        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-wrap justify-between gap-4 text-xs">
           <div className="space-y-1">
             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block font-sans">Documento Solicitado</span>
             <span className="font-extrabold text-sm text-gray-850 font-display">
-              Relatório {activeReport === 'promotor' ? 'por Promotor de Vendas' 
-                       : activeReport === 'industria' ? 'por Indústria Mapeada'
-                       : activeReport === 'agencia' ? 'por Agência Licenciada'
-                       : 'Gerencial de Auditoria Financeira'}
+              {activeReport === 'isv' ? 'Relatório Detalhado de ISV (Estoque e Inatividade)'
+               : activeReport === 'promotor' ? 'Relatório por Promotor de Vendas' 
+               : activeReport === 'industria' ? 'Relatório por Indústria Mapeada'
+               : activeReport === 'agencia' ? 'Relatório por Agência Licenciada'
+               : 'Relatório Financeiro Gerencial de Auditoria'}
             </span>
           </div>
 
@@ -465,8 +565,9 @@ export default function RelatoriosView({
             <div className="text-right border-l pl-4">
               <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">Filtros Ativos</span>
               <span className="font-bold text-gray-700 leading-none">
-                {activeReport === 'promotor' ? `Promotor: ${reportPromoter}`
-                 : activeReport === 'industria' ? `Fabricante Match`
+                {activeReport === 'isv' ? 'Filtro ISV Completo'
+                 : activeReport === 'promotor' ? `Promotor: ${reportPromoter}`
+                 : activeReport === 'industria' ? `Fabricante CNPJ Match`
                  : activeReport === 'agencia' ? `Agência: ${reportAgency}`
                  : 'Multifiltro Master'}
               </span>
@@ -477,7 +578,7 @@ export default function RelatoriosView({
         {/* SUMMARY BLOCKS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div className="bg-gray-50 rounded-lg p-3 border">
-            <div className="text-gray-400 text-[10px] font-bold uppercase">Volume Código</div>
+            <div className="text-gray-400 text-[10px] font-bold uppercase">Volume Total</div>
             <div className="text-lg font-black font-mono mt-0.5 text-gray-800">{reportSummary.totalItems} Itens</div>
           </div>
           <div className="bg-red-50 text-red-900 rounded-lg p-3 border border-red-100">
@@ -489,7 +590,7 @@ export default function RelatoriosView({
             <div className="text-lg font-black font-mono mt-0.5">{reportSummary.replenishment} Críticos</div>
           </div>
           <div className="bg-indigo-50 text-indigo-950 rounded-lg p-3 border border-indigo-100">
-            {isManagerOrAdmin && activeReport === 'gerencial' ? (
+            {isManagerOrAdmin && (activeReport === 'gerencial' || activeReport === 'isv') ? (
               <>
                 <div className="text-indigo-600 text-[10px] font-bold uppercase">Valor total em loja</div>
                 <div className="text-lg font-black font-mono mt-0.5">R$ {reportSummary.financialEstoqueValue.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</div>
@@ -504,15 +605,48 @@ export default function RelatoriosView({
         </div>
 
         {/* DATA GRID IN TABLE LAYOUT */}
-        <div className="overflow-hidden border border-gray-200 rounded-2xl">
+        <div className="overflow-x-auto border border-gray-200 rounded-2xl">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-gray-100 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px] tracking-wide">
-                <th className="p-3">Cód.</th>
+              <tr className="bg-gray-100 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px] tracking-wide select-none">
+                <th className="p-3 cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('codigo')}>
+                  <div className="flex items-center gap-1">
+                    Cód. {sortBy === 'codigo' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
+                  </div>
+                </th>
                 <th className="p-3">Descrição Mercadoria</th>
                 <th className="p-3">Emb.</th>
                 
-                {/* Specific layouts according to sub-report constraints */}
+                {/* ISV Detailed Columns */}
+                {activeReport === 'isv' && (
+                  <>
+                    <th className="p-3 text-center cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('estoqueDesc')}>
+                      <div className="flex items-center justify-center gap-1">
+                        EMB1 {sortBy === 'estoqueDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
+                      </div>
+                    </th>
+                    <th className="p-3 text-center cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('estoqueDesc')}>
+                      <div className="flex items-center justify-center gap-1">
+                        EMB9 {sortBy === 'estoqueDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
+                      </div>
+                    </th>
+                    <th className="p-3 text-center cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('semVendaDesc')}>
+                      <div className="flex items-center justify-center gap-1">
+                        Dias Sem Venda {sortBy === 'semVendaDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
+                      </div>
+                    </th>
+                    <th className="p-3 text-right cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('valorDesc')}>
+                      <div className="flex items-center justify-end gap-1">
+                        Valor Estoque {sortBy === 'valorDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
+                      </div>
+                    </th>
+                    <th className="p-3">Razão Social (Indústria)</th>
+                    <th className="p-3 font-bold">Promotor Responsável</th>
+                    <th className="p-3 text-right font-bold">Classificação</th>
+                  </>
+                )}
+
+                {/* Specific layouts according to other sub-report constraints */}
                 {activeReport === 'promotor' && (
                   <>
                     <th className="p-3 text-center">Fardos (Emb1)</th>
@@ -558,27 +692,58 @@ export default function RelatoriosView({
             <tbody className="divide-y divide-gray-100 text-[11px] font-sans">
               {reportData.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-10 text-gray-400 font-bold">
-                    Nenhum registro localizado sob os critérios de filtros indicados.
+                  <td colSpan={activeReport === 'isv' ? 10 : 8} className="text-center py-10 text-gray-400 font-bold">
+                    Nenhum registro localizado sob os critérios de filtros indicados. Certifique-se de cadastrar/importar os dados na Base Principal e configurar os Fornecedores.
                   </td>
                 </tr>
               ) : (
                 reportData.map((row) => {
                   return (
-                    <tr key={row.product.codigo} className="hover:bg-gray-55/40 transition-colors">
+                    <tr key={row.product.codigo} className="hover:bg-gray-50/40 transition-colors">
                       <td className="p-3 font-mono font-bold text-gray-900">{row.product.codigo}</td>
-                      <td className="p-3 font-bold text-gray-800 tracking-tight max-w-[200px] truncate">{row.product.descricao}</td>
-                      <td className="p-3 text-gray-400 font-mono font-medium">{row.product.embalagem}</td>
+                      <td className="p-3 font-bold text-gray-800 tracking-tight max-w-[200px] truncate" title={row.product.descricao}>
+                        {row.product.descricao}
+                      </td>
+                      <td className="p-3 text-gray-500 font-mono font-medium">{row.product.embalagem}</td>
                       
-                      {/* Promoter Sub-columns with strict hidden financial rule */}
+                      {/* ISV Detailed columns render */}
+                      {activeReport === 'isv' && (
+                        <>
+                          <td className="p-3 text-center font-mono font-bold text-gray-700 bg-gray-50/20">{row.product.estoqueEmb1}</td>
+                          <td className="p-3 text-center font-mono text-gray-750 bg-gray-50/20">{row.product.estoqueEmb9}</td>
+                          <td className="p-3 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
+                          <td className="p-3 text-right font-mono font-black text-gray-900">
+                            R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-3 font-semibold text-gray-700 max-w-[150px] truncate" title={row.nomeIndustria}>
+                            {row.nomeIndustria}
+                          </td>
+                          <td className="p-3 font-bold text-[#F58220] max-w-[120px] truncate" title={row.promotor}>
+                            {row.promotor}
+                          </td>
+                          <td className="p-3 text-right">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                              row.classificacao === 'Ruptura' ? 'bg-red-100 text-red-800' :
+                              row.classificacao === 'Abastecer' ? 'bg-orange-100 text-orange-800' :
+                              row.classificacao === 'Atenção' ? 'bg-yellow-100 text-yellow-800' :
+                              row.classificacao === 'Normal' ? 'bg-green-100 text-green-800' :
+                              'bg-indigo-100 text-indigo-800'
+                            }`}>
+                              {row.classificacao}
+                            </span>
+                          </td>
+                        </>
+                      )}
+
+                      {/* Promoter Sub-columns */}
                       {activeReport === 'promotor' && (
                         <>
                           <td className="p-3 text-center font-mono font-bold text-gray-700">{row.product.estoqueEmb1}</td>
                           <td className="p-3 text-center font-mono text-gray-750">{row.product.estoqueEmb9}</td>
                           <td className="p-3 text-center font-mono font-black text-gray-900 bg-gray-50/50">{row.estoqueTotal}</td>
-                          <td className="p-3 text-center font-mono text-red-650">{row.product.semVenda} dias</td>
+                          <td className="p-3 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
                           <td className="p-3 text-right">
-                            <span className="font-extrabold text-[10px] uppercase">{row.classificacao}</span>
+                            <span className="font-extrabold text-[10px] uppercase text-gray-700">{row.classificacao}</span>
                           </td>
                         </>
                       )}

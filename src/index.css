@@ -34,3 +34,42 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Professional Print Styles for Reports */
+@media print {
+  /* Hide the main app layout, sidebar, headers, and filters */
+  body, html, #atacao-root, #atacao-root * {
+    visibility: hidden;
+    background: white !important;
+  }
+  
+  /* Show only the report pane and its contents */
+  #report-print-pane, #report-print-pane * {
+    visibility: visible;
+  }
+  
+  /* Position and style the print pane to fill the page cleanly */
+  #report-print-pane {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0px !important;
+    margin: 0px !important;
+  }
+
+  /* Prevent page breaks inside table rows */
+  tr {
+    page-break-inside: avoid;
+  }
+  
+  /* Force colors to be printed in some browsers */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
