@@ -101,15 +101,54 @@ export function saveData(data: {
 }) {
   if (typeof window === 'undefined') return;
 
-  if (data.products) localStorage.setItem(KEYS.PRODUCTS, JSON.stringify(data.products));
-  if (data.suppliers) localStorage.setItem(KEYS.SUPPLIERS, JSON.stringify(data.suppliers));
-  if (data.promoters) localStorage.setItem(KEYS.PROMOTERS, JSON.stringify(data.promoters));
-  if (data.agencies) localStorage.setItem(KEYS.AGENCIES, JSON.stringify(data.agencies));
-  if (data.supHistory) localStorage.setItem(KEYS.SUP_HISTORY, JSON.stringify(data.supHistory));
-  if (data.impHistory) localStorage.setItem(KEYS.IMP_HISTORY, JSON.stringify(data.impHistory));
-  if (data.currentUser) localStorage.setItem(KEYS.CURRENT_USER, JSON.stringify(data.currentUser));
-  if (data.lastUpdateTime) {
-    localStorage.setItem(KEYS.LAST_UPDATE_TIME, data.lastUpdateTime);
+  try {
+    if (data.products) localStorage.setItem(KEYS.PRODUCTS, JSON.stringify(data.products));
+  } catch (e) {
+    console.warn("Could not save products to localStorage (probably exceeded storage quota):", e);
+  }
+
+  try {
+    if (data.suppliers) localStorage.setItem(KEYS.SUPPLIERS, JSON.stringify(data.suppliers));
+  } catch (e) {
+    console.warn("Could not save suppliers to localStorage:", e);
+  }
+
+  try {
+    if (data.promoters) localStorage.setItem(KEYS.PROMOTERS, JSON.stringify(data.promoters));
+  } catch (e) {
+    console.warn("Could not save promoters to localStorage:", e);
+  }
+
+  try {
+    if (data.agencies) localStorage.setItem(KEYS.AGENCIES, JSON.stringify(data.agencies));
+  } catch (e) {
+    console.warn("Could not save agencies to localStorage:", e);
+  }
+
+  try {
+    if (data.supHistory) localStorage.setItem(KEYS.SUP_HISTORY, JSON.stringify(data.supHistory));
+  } catch (e) {
+    console.warn("Could not save supHistory to localStorage:", e);
+  }
+
+  try {
+    if (data.impHistory) localStorage.setItem(KEYS.IMP_HISTORY, JSON.stringify(data.impHistory));
+  } catch (e) {
+    console.warn("Could not save impHistory to localStorage:", e);
+  }
+
+  try {
+    if (data.currentUser) localStorage.setItem(KEYS.CURRENT_USER, JSON.stringify(data.currentUser));
+  } catch (e) {
+    console.warn("Could not save currentUser to localStorage:", e);
+  }
+
+  try {
+    if (data.lastUpdateTime) {
+      localStorage.setItem(KEYS.LAST_UPDATE_TIME, data.lastUpdateTime);
+    }
+  } catch (e) {
+    console.warn("Could not save lastUpdateTime to localStorage:", e);
   }
 }
 
