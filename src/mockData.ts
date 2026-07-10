@@ -267,3 +267,54 @@ export function calculateSystemStats(products: Product[], suppliers: Supplier[],
     valorTotalEstoque
   };
 }
+
+/**
+ * Formats a raw input string to a standard Brazilian CNPJ: XX.XXX.XXX/XXXX-XX
+ */
+export function formatCnpj(val: string): string {
+  const clean = val.replace(/[^\d]/g, '').slice(0, 14);
+  if (clean.length <= 2) return clean;
+  if (clean.length <= 5) return `${clean.slice(0, 2)}.${clean.slice(2)}`;
+  if (clean.length <= 8) return `${clean.slice(0, 2)}.${clean.slice(2, 5)}.${clean.slice(5)}`;
+  if (clean.length <= 12) return `${clean.slice(0, 2)}.${clean.slice(2, 5)}.${clean.slice(5, 8)}/${clean.slice(8)}`;
+  return `${clean.slice(0, 2)}.${clean.slice(2, 5)}.${clean.slice(5, 8)}/${clean.slice(8, 12)}-${clean.slice(12, 14)}`;
+}
+
+/**
+ * Fetches the business name (Razão Social) for a given CNPJ using BrasilAPI.
+ */
+export async function fetchCnpjData(cnpj: string): Promise<string | null> {
+  const clean = cnpj.replace(/[^\d]/g, '');
+  if (clean.length !== 14) return null;
+  
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);
+    if (!response.ok) {
+      throw new Error(`BrasilAPI returned status ${response.status}`);
+    }
+    const data = await response.json();
+    const name = data.razao_social || data.nome_fantasia;
+    if (name) {
+      return String(name).trim().toUpperCase();
+    }
+    return null;
+  } catch (error) {
+    console.warn("Error fetching CNPJ from BrasilAPI:", error);
+    
+    // Fallback: Minha Receita API (open-source)
+    try {
+      const response = await fetch(`https://minhareceita.org/${clean}`);
+      if (response.ok) {
+        const data = await response.json();
+        const name = data.razao_social || data.nome_fantasia;
+        if (name) {
+          return String(name).trim().toUpperCase();
+        }
+      }
+    } catch (fallbackError) {
+      console.warn("Error fetching CNPJ from Minha Receita:", fallbackError);
+    }
+    
+    return null;
+  }
+}

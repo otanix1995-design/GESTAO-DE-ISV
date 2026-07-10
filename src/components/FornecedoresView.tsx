@@ -18,8 +18,10 @@ import {
   Check, 
   AlertCircle,
   HelpCircle,
-  Search
+  Search,
+  Loader2
 } from 'lucide-react';
+import { formatCnpj, fetchCnpjData } from '../mockData';
 import { motion } from 'motion/react';
 
 interface FornecedoresViewProps {
@@ -57,6 +59,38 @@ export default function FornecedoresView({
   const [newAgencia, setNewAgencia] = useState('');
   const [newDays, setNewDays] = useState<string[]>([]);
   const [addError, setAddError] = useState('');
+  const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
+
+  // CNPJ format and auto-lookup handler
+  const handleCnpjChange = async (val: string) => {
+    const formatted = formatCnpj(val);
+    setNewCnpj(formatted);
+    setAddError('');
+
+    const cleanCnpj = val.replace(/[^\d]/g, '');
+
+    // 1. Local Search to pre-fill instantly if already present
+    const localFound = suppliers.find(s => s.cnpjIndustria.replace(/[^\d]/g, '') === cleanCnpj);
+    if (localFound) {
+      setNewIndName(localFound.nomeIndustria);
+      return;
+    }
+
+    // 2. Fetch from BrasilAPI / fallback if complete (14 digits)
+    if (cleanCnpj.length === 14) {
+      setIsSearchingCnpj(true);
+      try {
+        const fetchedName = await fetchCnpjData(cleanCnpj);
+        if (fetchedName) {
+          setNewIndName(fetchedName);
+        }
+      } catch (err) {
+        console.error("Erro ao consultar CNPJ:", err);
+      } finally {
+        setIsSearchingCnpj(false);
+      }
+    }
+  };
 
   // Form States for Edit
   const [editPromotor, setEditPromotor] = useState('');
@@ -456,14 +490,21 @@ export default function FornecedoresView({
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">CNPJ DA INDÚSTRIA (Ex. 02.916.265/0001-60)*</label>
-                <input
-                  type="text"
-                  required
-                  value={newCnpj}
-                  onChange={(e) => setNewCnpj(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono font-bold"
-                  placeholder="00.000.000/0000-00"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={newCnpj}
+                    onChange={(e) => handleCnpjChange(e.target.value)}
+                    className="w-full px-3 py-2 pr-10 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono font-bold"
+                    placeholder="00.000.000/0000-00"
+                  />
+                  {isSearchingCnpj && (
+                    <div className="absolute right-3 top-2.5 flex items-center justify-center">
+                      <Loader2 className="w-4 h-4 text-[#F58220] animate-spin" />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>

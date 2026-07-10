@@ -26,6 +26,7 @@ interface PromotoresAgenciasProps {
   agencies: Agency[];
   setAgencies: (agencies: Agency[]) => void;
   currentUser: User;
+  viewMode?: 'promotores' | 'agencias';
 }
 
 export default function PromotoresAgenciasView({
@@ -33,11 +34,19 @@ export default function PromotoresAgenciasView({
   setPromoters,
   agencies,
   setAgencies,
-  currentUser
+  currentUser,
+  viewMode
 }: PromotoresAgenciasProps) {
   const canManage = currentUser.role === 'Admin' || currentUser.role === 'Gestor';
 
-  const [activeTab, setActiveTab ] = useState<'promotores' | 'agencias'>('promotores');
+  const [localActiveTab, setLocalActiveTab] = useState<'promotores' | 'agencias'>('promotores');
+  const activeTab = viewMode || localActiveTab;
+  const setActiveTab = (tab: 'promotores' | 'agencias') => {
+    if (!viewMode) {
+      setLocalActiveTab(tab);
+    }
+  };
+
   const [search, setSearch] = useState('');
 
   // Add Promoter Form State
@@ -157,31 +166,37 @@ export default function PromotoresAgenciasView({
       {/* Tab Switch Headers */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 font-display">Time de Promotores e Agências</h2>
+          <h2 className="text-xl font-bold text-gray-900 font-display">
+            {activeTab === 'promotores' ? 'Cadastro de Promotores' : 'Credenciamento de Agências'}
+          </h2>
           <p className="text-xs text-gray-500 mt-1">
-            Cadastre consultores independentes e credencie agências de publicidade externas conectadas ao Atacadão.
+            {activeTab === 'promotores' 
+              ? 'Cadastre consultores independentes e promotores ativos de vendas na filial Atacadão.'
+              : 'Faça o credenciamento e gestão de agências de publicidade externas autorizadas.'}
           </p>
         </div>
 
-        {/* Tab Selector */}
-        <div className="flex bg-gray-150 p-1 rounded-xl border text-xs font-bold shrink-0">
-          <button
-            onClick={() => { setActiveTab('promotores'); setSearch(''); }}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'promotores' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
-            }`}
-          >
-            <Contact className="w-4 h-4 text-[#F58220]" /> Promotores Cadastrados ({promoters.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('agencias'); setSearch(''); }}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'agencias' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
-            }`}
-          >
-            <Building2 className="w-4 h-4 text-[#F58220]" /> Credenciamento Agências ({agencies.length})
-          </button>
-        </div>
+        {/* Tab Selector - only shown when not driven directly by sidebar viewMode */}
+        {!viewMode && (
+          <div className="flex bg-gray-150 p-1 rounded-xl border text-xs font-bold shrink-0">
+            <button
+              onClick={() => { setActiveTab('promotores'); setSearch(''); }}
+              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+                activeTab === 'promotores' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              <Contact className="w-4 h-4 text-[#F58220]" /> Promotores Cadastrados ({promoters.length})
+            </button>
+            <button
+              onClick={() => { setActiveTab('agencias'); setSearch(''); }}
+              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+                activeTab === 'agencias' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              <Building2 className="w-4 h-4 text-[#F58220]" /> Credenciamento Agências ({agencies.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* FILTER SHEETS BAR */}

@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Product, Supplier, User } from '../types';
-import { computeProductDerived } from '../mockData';
+import { computeProductDerived, formatCnpj, fetchCnpjData } from '../mockData';
 import { 
   Search, 
   Plus, 
@@ -18,7 +18,8 @@ import {
   Calendar,
   X,
   FileSpreadsheet,
-  ArrowUpDown
+  ArrowUpDown,
+  Loader2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -71,19 +72,46 @@ export default function BasePrincipalView({
   const [editCnpj, setEditCnpj] = useState('');
   const [editIndName, setEditIndName] = useState('');
 
-  // Auto-fill industry name when CNPJ matches existing suppliers
-  const handleCnpjChange = (val: string, type: 'add' | 'edit') => {
-    const cleanCnpj = val.replace(/[^\d]/g, '');
-    const found = suppliers.find(s => s.cnpjIndustria.replace(/[^\d]/g, '') === cleanCnpj);
+  const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
+
+  // Auto-fill industry name when CNPJ matches existing suppliers or fetches from BrasilAPI
+  const handleCnpjChange = async (val: string, type: 'add' | 'edit') => {
+    const formatted = formatCnpj(val);
     if (type === 'add') {
-      setNewCnpj(val);
-      if (found) {
-        setNewIndName(found.nomeIndustria);
-      }
+      setNewCnpj(formatted);
     } else {
-      setEditCnpj(val);
-      if (found) {
+      setEditCnpj(formatted);
+    }
+
+    const cleanCnpj = val.replace(/[^\d]/g, '');
+    
+    // 1. Local Search to pre-fill instantly if already present
+    const found = suppliers.find(s => s.cnpjIndustria.replace(/[^\d]/g, '') === cleanCnpj);
+    if (found) {
+      if (type === 'add') {
+        setNewIndName(found.nomeIndustria);
+      } else {
         setEditIndName(found.nomeIndustria);
+      }
+      return;
+    }
+
+    // 2. Fetch from BrasilAPI / fallback if complete (14 digits)
+    if (cleanCnpj.length === 14) {
+      setIsSearchingCnpj(true);
+      try {
+        const fetchedName = await fetchCnpjData(cleanCnpj);
+        if (fetchedName) {
+          if (type === 'add') {
+            setNewIndName(fetchedName);
+          } else {
+            setEditIndName(fetchedName);
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao consultar CNPJ:", err);
+      } finally {
+        setIsSearchingCnpj(false);
       }
     }
   };
@@ -652,14 +680,21 @@ export default function BasePrincipalView({
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">CNPJ DA INDÚSTRIA (Ex. 02.916.265/0001-60)*</label>
-                <input
-                  type="text"
-                  required
-                  value={newCnpj}
-                  onChange={(e) => handleCnpjChange(e.target.value, 'add')}
-                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono text-xs font-bold"
-                  placeholder="00.000.000/0000-00"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={newCnpj}
+                    onChange={(e) => handleCnpjChange(e.target.value, 'add')}
+                    className="w-full px-3 py-2 pr-10 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono text-xs font-bold"
+                    placeholder="00.000.000/0000-00"
+                  />
+                  {isSearchingCnpj && (
+                    <div className="absolute right-3 top-2.5 flex items-center justify-center">
+                      <Loader2 className="w-4 h-4 text-[#F58220] animate-spin" />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -749,13 +784,20 @@ export default function BasePrincipalView({
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">CNPJ DA INDÚSTRIA*</label>
-                <input
-                  type="text"
-                  required
-                  value={editCnpj}
-                  onChange={(e) => handleCnpjChange(e.target.value, 'edit')}
-                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono text-xs font-bold"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={editCnpj}
+                    onChange={(e) => handleCnpjChange(e.target.value, 'edit')}
+                    className="w-full px-3 py-2 pr-10 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono text-xs font-bold"
+                  />
+                  {isSearchingCnpj && (
+                    <div className="absolute right-3 top-2.5 flex items-center justify-center">
+                      <Loader2 className="w-4 h-4 text-[#F58220] animate-spin" />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>

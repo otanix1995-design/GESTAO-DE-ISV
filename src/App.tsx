@@ -262,6 +262,7 @@ export default function App() {
       case 'promotores':
         return (
           <PromotoresAgenciasView
+            viewMode="promotores"
             promoters={promoters}
             setPromoters={setPromoters}
             agencies={agencies}
@@ -270,9 +271,9 @@ export default function App() {
           />
         );
       case 'agencias':
-        // Same visual component under agencies tab view
         return (
           <PromotoresAgenciasView
+            viewMode="agencias"
             promoters={promoters}
             setPromoters={setPromoters}
             agencies={agencies}
