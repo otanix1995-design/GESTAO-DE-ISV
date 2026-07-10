@@ -422,8 +422,9 @@ export default function ImportView({
           const cols = row.split(/[\t,|;]/).map(c => c.trim().replace(/^"(.*)"$/, '$1'));
           if (cols.length < 1 || !cols[0]) return; // Skip empty rows
 
-          const codigo = cols[iCodigo];
-          if (!codigo) return;
+          const rawCodigo = cols[iCodigo];
+          if (!rawCodigo) return;
+          const codigo = rawCodigo.replace(/^0+/, '') || '0';
           const descricao = cols[iDescricao] || 'Sem descrição';
           const embalagem = cols[iEmbalagem] || 'UN';
           const estoqueEmb1 = Math.max(0, parseInt(cols[iEstoqueEmb1]) || 0);
@@ -514,8 +515,9 @@ export default function ImportView({
           const cols = row.split(/[\t,|;]/).map(c => c.trim().replace(/^"(.*)"$/, '$1'));
           if (cols.length < 1 || !cols[0]) return;
 
-          const codigo = cols[iCodigo];
-          if (!codigo) return;
+          const rawCodigo = cols[iCodigo];
+          if (!rawCodigo) return;
+          const codigo = rawCodigo.replace(/^0+/, '') || '0';
           const descricao = cols[iDescricao] || '';
           const embalagem = cols[iEmbalagem] || 'UN';
           const cnpj = cols[iCnpj] || '';

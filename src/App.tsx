@@ -8,7 +8,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { db } from './lib/firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import Header from './components/Header';
 import Sidebar, { ActiveTab } from './components/Sidebar';
 import DashboardView from './components/DashboardView';
@@ -60,78 +62,68 @@ export default function App() {
   const [hasLoadedFromServer, setHasLoadedFromServer] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
+  // Reference to track the timestamp of the last local change made by this client
+  const lastLocalChangeTime = useRef<number>(0);
+
   // Tabs routes & Mobile navigation rails
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
-  // 1. Initial Load from Express Shared DB on Mount
+  // 1. Establish Real-Time Synchronization with Firebase Firestore
   useEffect(() => {
-    async function initData() {
-      try {
-        const response = await fetch('/api/data');
-        const json = await response.json();
-        if (json && json.data) {
-          const s = json.data;
-          if (Array.isArray(s.products)) setProducts(s.products);
-          if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
-          if (Array.isArray(s.promoters)) setPromoters(s.promoters);
-          if (Array.isArray(s.agencies)) setAgencies(s.agencies);
-          if (Array.isArray(s.supHistory)) setSupHistory(s.supHistory);
-          if (Array.isArray(s.impHistory)) setImpHistory(s.impHistory);
-          if (s.currentUser) setCurrentUser(s.currentUser);
-          if (s.lastUpdateTime) setLastUpdateTime(s.lastUpdateTime);
-        } else {
-          // Push initial data to server if empty
-          const localDefaults = getSavedData();
-          await fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(localDefaults)
-          });
+    const docRef = doc(db, 'state', 'current');
+    
+    // Subscribe to real-time changes
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const s = snapshot.data();
+        
+        // Skip updating local state if the snapshot contains pending writes from this client.
+        // This avoids cursor jumps or overwrite issues during rapid input sessions.
+        if (snapshot.metadata.hasPendingWrites) {
+          return;
         }
-      } catch (err) {
-        console.error("Erro ao carregar do servidor principal:", err);
-      } finally {
-        setHasLoadedFromServer(true);
-      }
-    }
-    initData();
-  }, []);
 
-  // 2. Poll server for updates every 10 seconds to auto-sync for other open tabs/managers
-  useEffect(() => {
-    let active = true;
-    const interval = setInterval(async () => {
-      try {
-        if (isResetting) return;
-        const response = await fetch('/api/data');
-        if (!response.ok) return;
-        const json = await response.json();
-        if (active && json && json.data && !isResetting) {
-          const s = json.data;
-          if (Array.isArray(s.products)) setProducts(s.products);
-          if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
-          if (Array.isArray(s.promoters)) setPromoters(s.promoters);
-          if (Array.isArray(s.agencies)) setAgencies(s.agencies);
-          if (Array.isArray(s.supHistory)) setSupHistory(s.supHistory);
-          if (Array.isArray(s.impHistory)) setImpHistory(s.impHistory);
-          if (s.lastUpdateTime) setLastUpdateTime(s.lastUpdateTime);
-        }
-      } catch (e) {
-        console.error("Erro ao atualizar em background:", e);
+        if (Array.isArray(s.products)) setProducts(s.products);
+        if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
+        if (Array.isArray(s.promoters)) setPromoters(s.promoters);
+        if (Array.isArray(s.agencies)) setAgencies(s.agencies);
+        if (Array.isArray(s.supHistory)) setSupHistory(s.supHistory);
+        if (Array.isArray(s.impHistory)) setImpHistory(s.impHistory);
+        if (s.lastUpdateTime) setLastUpdateTime(s.lastUpdateTime);
+      } else {
+        // If the Firestore document does not exist yet, seed it with local/initial data
+        console.log("Firestore state empty. Seeding with local or initial mock data.");
+        const localDefaults = getSavedData();
+        setDoc(docRef, {
+          products: localDefaults.products || [],
+          suppliers: localDefaults.suppliers || [],
+          promoters: localDefaults.promoters || [],
+          agencies: localDefaults.agencies || [],
+          supHistory: localDefaults.supHistory || [],
+          impHistory: localDefaults.impHistory || [],
+          lastUpdateTime: localDefaults.lastUpdateTime || '2026-06-04T07:30:00Z'
+        }).catch(err => console.error("Erro ao inicializar base no Firestore:", err));
       }
-    }, 10000);
+      setHasLoadedFromServer(true);
+    }, (error) => {
+      console.error("Erro no listener em tempo real do Firestore:", error);
+      // Fallback: make sure the app works and can be loaded
+      setHasLoadedFromServer(true);
+    });
 
     return () => {
-      active = false;
-      clearInterval(interval);
+      unsubscribe();
     };
-  }, [isResetting]);
+  }, []);
 
-  // 3. Auto-save local changes both locally (offline) and server-side (multiplayer synchronization)
+  // 2. Automatically save local changes to both LocalStorage (offline) and Firestore (live multiplayer)
   useEffect(() => {
     if (!hasLoadedFromServer || isResetting) return;
+
+    // Track that a local change was just made
+    lastLocalChangeTime.current = Date.now();
 
     const payload = {
       products,
@@ -144,15 +136,31 @@ export default function App() {
       lastUpdateTime
     };
 
+    // Save to LocalStorage
     saveData(payload);
 
+    // Save to Firestore
+    const docRef = doc(db, 'state', 'current');
+    setDoc(docRef, {
+      products,
+      suppliers,
+      promoters,
+      agencies,
+      supHistory,
+      impHistory,
+      lastUpdateTime
+    }).catch(err => {
+      console.error("Erro ao sincronizar dados com o Firestore:", err);
+    });
+
+    // Redundant backup to local Express backend
     fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    }).catch(err => console.error("Erro ao persistir no servidor central:", err));
+    }).catch(err => console.error("Erro ao sincronizar com servidor backup:", err));
 
-  }, [products, suppliers, promoters, agencies, supHistory, impHistory, currentUser, lastUpdateTime, hasLoadedFromServer, isResetting]);
+  }, [products, suppliers, promoters, agencies, supHistory, impHistory, lastUpdateTime, hasLoadedFromServer, isResetting]);
 
   // Handle active role selector changes (ensure safe tab redirects on permission change)
   const handleUserChange = (newUser: User) => {
@@ -167,7 +175,7 @@ export default function App() {
     }
   };
 
-  // Reset database to initials on backend server + browser local storage
+  // Reset database to initials on backend server + browser local storage + Firestore
   const handleResetDatabase = async () => {
     try {
       setIsResetting(true);
@@ -182,9 +190,20 @@ export default function App() {
         agencies: INITIAL_AGENCIES,
         supHistory: INITIAL_SUPPLIER_HISTORY,
         impHistory: INITIAL_IMPORT_HISTORY,
-        currentUser: TEST_USERS[0],
         lastUpdateTime: '2026-06-04T07:30:00Z'
       };
+
+      // Reset on Firestore
+      const docRef = doc(db, 'state', 'current');
+      await setDoc(docRef, {
+        products: INITIAL_PRODUCTS,
+        suppliers: INITIAL_SUPPLIERS,
+        promoters: INITIAL_PROMOTERS,
+        agencies: INITIAL_AGENCIES,
+        supHistory: INITIAL_SUPPLIER_HISTORY,
+        impHistory: INITIAL_IMPORT_HISTORY,
+        lastUpdateTime: '2026-06-04T07:30:00Z'
+      });
 
       await fetch('/api/reset', { 
         method: 'POST',

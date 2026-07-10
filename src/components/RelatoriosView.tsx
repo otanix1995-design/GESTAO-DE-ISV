@@ -63,6 +63,20 @@ export default function RelatoriosView({
   // Sorting state: 'none', 'estoqueDesc' (estoque maior para o menor), 'valorDesc' (valor do estoque maior para menor), 'semVendaDesc', 'codigo'
   const [sortBy, setSortBy] = useState<'none' | 'estoqueDesc' | 'valorDesc' | 'semVendaDesc' | 'codigo'>('none');
 
+  // Toggle to hide financial values (R$) for security/privacy.
+  const [hideFinancialValues, setHideFinancialValues] = useState(isPromotor || activeReport === 'promotor');
+
+  // Automatically adjust "Ocultar valores em R$" based on active report type, active user role, or promoter filters
+  React.useEffect(() => {
+    if (isPromotor) {
+      setHideFinancialValues(true);
+    } else if (activeReport === 'promotor' || (activeReport === 'isv' && reportPromoter !== 'todos')) {
+      setHideFinancialValues(true);
+    } else {
+      setHideFinancialValues(false);
+    }
+  }, [activeReport, reportPromoter, isPromotor]);
+
   // Clear success notification after 3 seconds
   const triggerExportNotification = (message: string) => {
     setExportSuccessMessage(message);
@@ -206,20 +220,36 @@ export default function RelatoriosView({
     let filename = `relatorio_${activeReport}_${selectedDate}.csv`;
 
     if (activeReport === 'isv') {
-      headers = ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'VALOR ESTOQUE (R$)', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO'];
-      rows = reportData.map(d => [
-        d.product.codigo,
-        d.product.descricao,
-        d.product.embalagem,
-        d.product.estoqueEmb1.toString(),
-        d.product.estoqueEmb9.toString(),
-        d.estoqueTotal.toString(),
-        d.product.semVenda.toString(),
-        d.valorEstoque.toFixed(2),
-        d.nomeIndustria,
-        d.promotor,
-        d.classificacao
-      ]);
+      headers = hideFinancialValues
+        ? ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO']
+        : ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'VALOR ESTOQUE (R$)', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO'];
+      rows = reportData.map(d => hideFinancialValues
+        ? [
+            d.product.codigo,
+            d.product.descricao,
+            d.product.embalagem,
+            d.product.estoqueEmb1.toString(),
+            d.product.estoqueEmb9.toString(),
+            d.estoqueTotal.toString(),
+            d.product.semVenda.toString(),
+            d.nomeIndustria,
+            d.promotor,
+            d.classificacao
+          ]
+        : [
+            d.product.codigo,
+            d.product.descricao,
+            d.product.embalagem,
+            d.product.estoqueEmb1.toString(),
+            d.product.estoqueEmb9.toString(),
+            d.estoqueTotal.toString(),
+            d.product.semVenda.toString(),
+            d.valorEstoque.toFixed(2),
+            d.nomeIndustria,
+            d.promotor,
+            d.classificacao
+          ]
+      );
     } else if (activeReport === 'promotor') {
       headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'SEM VENDA (DIAS)', 'STATUS'];
       rows = reportData.map(d => [
@@ -257,19 +287,33 @@ export default function RelatoriosView({
         d.classificacao
       ]);
     } else if (activeReport === 'gerencial') {
-      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'CUSTO MÉDIO (R$)', 'VALOR ESTOQUE (R$)', 'STATUS', 'PROMOTOR'];
-      rows = reportData.map(d => [
-        d.product.codigo,
-        d.product.descricao,
-        d.product.embalagem,
-        d.product.estoqueEmb1.toString(),
-        d.product.estoqueEmb9.toString(),
-        d.estoqueTotal.toString(),
-        d.product.custoMedio.toFixed(2),
-        d.valorEstoque.toFixed(2),
-        d.classificacao,
-        d.promotor
-      ]);
+      headers = hideFinancialValues
+        ? ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'STATUS', 'PROMOTOR']
+        : ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'CUSTO MÉDIO (R$)', 'VALOR ESTOQUE (R$)', 'STATUS', 'PROMOTOR'];
+      rows = reportData.map(d => hideFinancialValues
+        ? [
+            d.product.codigo,
+            d.product.descricao,
+            d.product.embalagem,
+            d.product.estoqueEmb1.toString(),
+            d.product.estoqueEmb9.toString(),
+            d.estoqueTotal.toString(),
+            d.classificacao,
+            d.promotor
+          ]
+        : [
+            d.product.codigo,
+            d.product.descricao,
+            d.product.embalagem,
+            d.product.estoqueEmb1.toString(),
+            d.product.estoqueEmb9.toString(),
+            d.estoqueTotal.toString(),
+            d.product.custoMedio.toFixed(2),
+            d.valorEstoque.toFixed(2),
+            d.classificacao,
+            d.promotor
+          ]
+      );
     }
 
     // Build delimiter rows
@@ -496,19 +540,38 @@ export default function RelatoriosView({
           </div>
 
           {/* Export and Print Action Buttons */}
-          <div className="col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-6 flex justify-end gap-3 pt-2 text-xs border-t border-gray-100 mt-2">
-            <button
-              onClick={handleExportCSV}
-              className="px-5 py-2.5 bg-white border border-gray-250 text-gray-700 rounded-xl hover:bg-gray-50 font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Exportar Planilha Excel/CSV
-            </button>
-            <button
-              onClick={handlePrintPDF}
-              className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
-            >
-              <Printer className="w-4 h-4 text-white" /> Imprimir Relatório / Gerar PDF
-            </button>
+          <div className="col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pt-4 border-t border-gray-100 mt-2">
+            {/* Privacy toggle on the left */}
+            <div className="flex items-center gap-2.5 bg-amber-50/50 border border-amber-200/50 px-4 py-2.5 rounded-xl self-start md:self-auto">
+              <input
+                type="checkbox"
+                id="hide-financial-toggle"
+                checked={hideFinancialValues}
+                disabled={isPromotor}
+                onChange={(e) => setHideFinancialValues(e.target.checked)}
+                className="w-4 h-4 text-[#F58220] border-gray-300 rounded focus:ring-[#F58220] accent-[#F58220] cursor-pointer"
+              />
+              <label htmlFor="hide-financial-toggle" className="text-xs font-bold text-amber-900 cursor-pointer select-none flex flex-col">
+                <span>Ocultar valores em R$ (Privacidade do Promotor)</span>
+                <span className="text-[10px] font-normal text-amber-700">Recomendado para impressão ou envio ao promotor externo</span>
+              </label>
+            </div>
+
+            {/* Action Buttons on the right */}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleExportCSV}
+                className="px-5 py-2.5 bg-white border border-gray-250 text-gray-700 rounded-xl hover:bg-gray-50 font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Exportar Planilha Excel/CSV
+              </button>
+              <button
+                onClick={handlePrintPDF}
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Printer className="w-4 h-4 text-white" /> Imprimir Relatório / Gerar PDF
+              </button>
+            </div>
           </div>
 
         </div>
@@ -590,7 +653,7 @@ export default function RelatoriosView({
             <div className="text-lg font-black font-mono mt-0.5">{reportSummary.replenishment} Críticos</div>
           </div>
           <div className="bg-indigo-50 text-indigo-950 rounded-lg p-3 border border-indigo-100">
-            {isManagerOrAdmin && (activeReport === 'gerencial' || activeReport === 'isv') ? (
+            {isManagerOrAdmin && (activeReport === 'gerencial' || activeReport === 'isv') && !hideFinancialValues ? (
               <>
                 <div className="text-indigo-600 text-[10px] font-bold uppercase">Valor total em loja</div>
                 <div className="text-lg font-black font-mono mt-0.5">R$ {reportSummary.financialEstoqueValue.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</div>
@@ -635,11 +698,13 @@ export default function RelatoriosView({
                         Dias Sem Venda {sortBy === 'semVendaDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
                       </div>
                     </th>
-                    <th className="p-3 text-right cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('valorDesc')}>
-                      <div className="flex items-center justify-end gap-1">
-                        Valor Estoque {sortBy === 'valorDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
-                      </div>
-                    </th>
+                    {!hideFinancialValues && (
+                      <th className="p-3 text-right cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('valorDesc')}>
+                        <div className="flex items-center justify-end gap-1">
+                          Valor Estoque {sortBy === 'valorDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
+                        </div>
+                      </th>
+                    )}
                     <th className="p-3">Razão Social (Indústria)</th>
                     <th className="p-3 font-bold">Promotor Responsável</th>
                     <th className="p-3 text-right font-bold">Classificação</th>
@@ -680,8 +745,8 @@ export default function RelatoriosView({
                   <>
                     <th className="p-3 text-center">Emb1</th>
                     <th className="p-3 text-center">Emb9</th>
-                    <th className="p-3 text-right">Custo Unit</th>
-                    <th className="p-3 text-right">Valor Ativo</th>
+                    {!hideFinancialValues && <th className="p-3 text-right">Custo Unit</th>}
+                    {!hideFinancialValues && <th className="p-3 text-right">Valor Ativo</th>}
                     <th className="p-3">Promotor</th>
                     <th className="p-3 text-right font-bold">Classificação</th>
                   </>
@@ -692,7 +757,14 @@ export default function RelatoriosView({
             <tbody className="divide-y divide-gray-100 text-[11px] font-sans">
               {reportData.length === 0 ? (
                 <tr>
-                  <td colSpan={activeReport === 'isv' ? 10 : 8} className="text-center py-10 text-gray-400 font-bold">
+                  <td 
+                    colSpan={
+                      activeReport === 'isv' 
+                        ? (hideFinancialValues ? 9 : 10) 
+                        : (activeReport === 'gerencial' ? (hideFinancialValues ? 6 : 8) : 8)
+                    } 
+                    className="text-center py-10 text-gray-400 font-bold"
+                  >
                     Nenhum registro localizado sob os critérios de filtros indicados. Certifique-se de cadastrar/importar os dados na Base Principal e configurar os Fornecedores.
                   </td>
                 </tr>
@@ -712,9 +784,11 @@ export default function RelatoriosView({
                           <td className="p-3 text-center font-mono font-bold text-gray-700 bg-gray-50/20">{row.product.estoqueEmb1}</td>
                           <td className="p-3 text-center font-mono text-gray-750 bg-gray-50/20">{row.product.estoqueEmb9}</td>
                           <td className="p-3 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
-                          <td className="p-3 text-right font-mono font-black text-gray-900">
-                            R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </td>
+                          {!hideFinancialValues && (
+                            <td className="p-3 text-right font-mono font-black text-gray-900">
+                              R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
+                          )}
                           <td className="p-3 font-semibold text-gray-700 max-w-[150px] truncate" title={row.nomeIndustria}>
                             {row.nomeIndustria}
                           </td>
@@ -774,8 +848,8 @@ export default function RelatoriosView({
                         <>
                           <td className="p-3 text-center font-mono text-gray-600">{row.product.estoqueEmb1}</td>
                           <td className="p-3 text-center font-mono text-gray-600">{row.product.estoqueEmb9}</td>
-                          <td className="p-3 text-right font-mono text-gray-600">R$ {row.product.custoMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                          <td className="p-3 text-right font-mono font-black text-gray-900 bg-orange-50/20">R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          {!hideFinancialValues && <td className="p-3 text-right font-mono text-gray-600">R$ {row.product.custoMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
+                          {!hideFinancialValues && <td className="p-3 text-right font-mono font-black text-gray-900 bg-orange-50/20">R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
                           <td className="p-3 font-bold text-gray-700">{row.promotor}</td>
                           <td className="p-3 text-right font-black uppercase text-[9px]">{row.classificacao}</td>
                         </>
