@@ -94,11 +94,33 @@ export default function App() {
         if (!isMounted) return;
         
         let s = null;
-        if (res && res.data && Object.keys(res.data).length > 0) {
-          s = res.data;
+        let sSource = 'localStorage';
+        const localTimestamp = initialData.lastUpdateTime || '2026-06-04T07:30:00Z';
+        const localTimeMs = Date.parse(localTimestamp);
+
+        if (res && res.data) {
+          const serverTimestamp = res.data.lastUpdateTime || '2026-06-04T07:30:00Z';
+          const serverTimeMs = Date.parse(serverTimestamp);
+
+          const localHasProducts = Array.isArray(initialData.products) && initialData.products.length > 0;
+          const serverHasProducts = Array.isArray(res.data.products) && res.data.products.length > 0;
+
+          // We adopt the server state if:
+          // 1. Server has a newer timestamp AND server is actually populated (or it is a reset)
+          // 2. OR local storage is empty, but server is populated
+          const isReset = res.data.lastUpdateTime === '2026-06-04T07:30:00Z';
+          if ((serverTimeMs > localTimeMs && (serverHasProducts || isReset)) || (!localHasProducts && serverHasProducts)) {
+            s = res.data;
+            sSource = 'server';
+          } else {
+            s = initialData;
+            sSource = 'localStorage (preferred - newer or has data)';
+          }
         } else {
-          s = getSavedData();
+          s = initialData;
         }
+
+        console.log(`[Boot] Selected state source: ${sSource}`, s);
 
         if (Array.isArray(s.products)) {
           const cleaned = s.products.map((p: any) => ({
@@ -133,7 +155,7 @@ export default function App() {
         if (!isMounted) return;
         
         // LocalStorage fallback
-        const s = getSavedData();
+        const s = initialData;
         if (Array.isArray(s.products)) {
           const cleaned = s.products.map((p: any) => ({
             ...p,
@@ -180,10 +202,15 @@ export default function App() {
           return;
         }
 
-        // Only synchronize products list from Firestore if it is actually populated.
-        // If it is empty, it probably represents a write failure due to Firestore 1MB limits.
-        // We only allow empty list if it's explicitly a database reset (timestamp '2026-06-04T07:30:00Z')
         const isReset = s.lastUpdateTime === '2026-06-04T07:30:00Z';
+
+        // Safety: If local client has products, but the Firestore snapshot has NO products (and it is not a reset),
+        // do not let the empty/corrupted snapshot overwrite our rich local data.
+        if (products.length > 0 && (!Array.isArray(s.products) || s.products.length === 0) && !isReset) {
+          console.log("Firestore snapshot is empty of products, but local has products. Skipping snapshot update.");
+          return;
+        }
+
         if (Array.isArray(s.products) && (s.products.length > 0 || isReset)) {
           const cleaned = s.products.map((p: any) => ({
             ...p,
@@ -194,19 +221,19 @@ export default function App() {
             return isSame ? prev : cleaned;
           });
         }
-        if (Array.isArray(s.suppliers)) {
+        if (Array.isArray(s.suppliers) && (s.suppliers.length > 0 || isReset)) {
           setSuppliers(prev => JSON.stringify(prev) === JSON.stringify(s.suppliers) ? prev : s.suppliers);
         }
-        if (Array.isArray(s.promoters)) {
+        if (Array.isArray(s.promoters) && (s.promoters.length > 0 || isReset)) {
           setPromoters(prev => JSON.stringify(prev) === JSON.stringify(s.promoters) ? prev : s.promoters);
         }
-        if (Array.isArray(s.agencies)) {
+        if (Array.isArray(s.agencies) && (s.agencies.length > 0 || isReset)) {
           setAgencies(prev => JSON.stringify(prev) === JSON.stringify(s.agencies) ? prev : s.agencies);
         }
-        if (Array.isArray(s.supHistory)) {
+        if (Array.isArray(s.supHistory) && (s.supHistory.length > 0 || isReset)) {
           setSupHistory(prev => JSON.stringify(prev) === JSON.stringify(s.supHistory) ? prev : s.supHistory);
         }
-        if (Array.isArray(s.impHistory)) {
+        if (Array.isArray(s.impHistory) && (s.impHistory.length > 0 || isReset)) {
           setImpHistory(prev => JSON.stringify(prev) === JSON.stringify(s.impHistory) ? prev : s.impHistory);
         }
         if (s.lastUpdateTime) {
