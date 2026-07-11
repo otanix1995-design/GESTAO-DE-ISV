@@ -181,7 +181,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
   const occurrencesData = useMemo(() => {
     return [
       { name: 'Normal', count: dashboardStats.normais, color: 'bg-green-500', barColor: '#22c55e', description: 'Estoques em condições saudáveis' },
-      { name: 'Ruptura', count: dashboardStats.rupturas, color: 'bg-[#F25C54]', barColor: '#F25C54', description: 'Item sem estoque (Emb1 e Emb9 = 0)' },
+      { name: 'Ruptura', count: dashboardStats.rupturas, color: 'bg-[#F25C54]', barColor: '#F25C54', description: 'Item sem saldo de estoque (estoque total = 0)' },
       { name: 'Abastecer', count: dashboardStats.abastecer, color: 'bg-[#F58220]', barColor: '#F58220', description: 'Indisponível em unidades avulsas' },
       { name: 'Atenção', count: dashboardStats.atencao, color: 'bg-[#FFC72C]', barColor: '#FFC72C', description: 'Restante apenas em unidades avulsas' },
       { name: 'Ajuste', count: dashboardStats.ajustes, color: 'bg-indigo-400', barColor: '#818cf8', description: 'Valor financeiro baixo (< R$ 200)' }

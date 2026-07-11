@@ -71,6 +71,12 @@ export default function App() {
 
   // Reference to track the timestamp of the last local change made by this client
   const lastLocalChangeTime = useRef<number>(0);
+  const lastUpdateTimeRef = useRef<string>(lastUpdateTime);
+
+  // Sync the ref with the state so our listener closure always has access to the correct local time
+  useEffect(() => {
+    lastUpdateTimeRef.current = lastUpdateTime;
+  }, [lastUpdateTime]);
 
   // Tabs routes & Mobile navigation rails
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -89,6 +95,16 @@ export default function App() {
         // Skip updating local state if the snapshot contains pending writes from this client.
         // This avoids cursor jumps or overwrite issues during rapid input sessions.
         if (snapshot.metadata.hasPendingWrites) {
+          return;
+        }
+
+        // Compare timestamps to prevent older Firestore snapshots from overwriting newer local state
+        const localTime = Date.parse(lastUpdateTimeRef.current || '2026-06-04T07:30:00Z');
+        const serverTime = s.lastUpdateTime ? Date.parse(s.lastUpdateTime) : 0;
+
+        if (serverTime > 0 && localTime > serverTime) {
+          console.log("Local state is newer than Firestore snapshot. Skipping snapshot write to local state.");
+          setHasLoadedFromServer(true);
           return;
         }
 
@@ -146,8 +162,41 @@ export default function App() {
       setHasLoadedFromServer(true);
     }, (error) => {
       console.error("Erro no listener em tempo real do Firestore:", error);
-      // Fallback: make sure the app works and can be loaded
-      setHasLoadedFromServer(true);
+      // Fallback: load state from Node Express server backup (db.json)
+      fetch('/api/data')
+        .then(res => res.json())
+        .then(res => {
+          if (res && res.data) {
+            const s = res.data;
+            if (Array.isArray(s.products) && s.products.length > 0) {
+              const cleaned = s.products.map((p: any) => ({
+                ...p,
+                codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
+              }));
+              setProducts(cleaned);
+            }
+            if (Array.isArray(s.suppliers) && s.suppliers.length > 0) {
+              setSuppliers(s.suppliers);
+            }
+            if (Array.isArray(s.promoters) && s.promoters.length > 0) {
+              setPromoters(s.promoters);
+            }
+            if (Array.isArray(s.agencies) && s.agencies.length > 0) {
+              setAgencies(s.agencies);
+            }
+            if (Array.isArray(s.supHistory)) {
+              setSupHistory(s.supHistory);
+            }
+            if (Array.isArray(s.impHistory)) {
+              setImpHistory(s.impHistory);
+            }
+          }
+          setHasLoadedFromServer(true);
+        })
+        .catch(err => {
+          console.error("Erro no fallback do Express server:", err);
+          setHasLoadedFromServer(true);
+        });
     });
 
     return () => {
@@ -162,6 +211,8 @@ export default function App() {
     // Track that a local change was just made
     lastLocalChangeTime.current = Date.now();
 
+    const currentTimestamp = new Date().toISOString();
+
     const payload = {
       products,
       suppliers,
@@ -170,7 +221,7 @@ export default function App() {
       supHistory,
       impHistory,
       currentUser,
-      lastUpdateTime
+      lastUpdateTime: currentTimestamp
     };
 
     // Save to LocalStorage
@@ -185,7 +236,7 @@ export default function App() {
       agencies,
       supHistory,
       impHistory,
-      lastUpdateTime
+      lastUpdateTime: currentTimestamp
     }).catch(err => {
       console.error("Erro ao sincronizar dados com o Firestore:", err);
     });
@@ -197,7 +248,10 @@ export default function App() {
       body: JSON.stringify(payload)
     }).catch(err => console.error("Erro ao sincronizar com servidor backup:", err));
 
-  }, [products, suppliers, promoters, agencies, supHistory, impHistory, lastUpdateTime, hasLoadedFromServer, isResetting]);
+    // Update local state without triggering re-runs since lastUpdateTime is not in the dependency array
+    setLastUpdateTime(currentTimestamp);
+
+  }, [products, suppliers, promoters, agencies, supHistory, impHistory, hasLoadedFromServer, isResetting]);
 
   // Handle active role selector changes (ensure safe tab redirects on permission change)
   const handleUserChange = (newUser: User) => {

@@ -58,6 +58,7 @@ export default function RelatoriosView({
   const [reportIndustry, setReportIndustry] = useState('todos');
   const [reportAgency, setReportAgency] = useState('todos');
   const [reportStatus, setReportStatus] = useState('todos');
+  const [filterStock, setFilterStock] = useState<'todos' | 'zerado' | 'positivo'>('todos');
   const [exportSuccessMessage, setExportSuccessMessage] = useState('');
   
   // Sorting state: 'none', 'estoqueDesc' (estoque maior para o menor), 'valorDesc' (valor do estoque maior para menor), 'semVendaDesc', 'codigo'
@@ -177,6 +178,13 @@ export default function RelatoriosView({
       }
     }
 
+    // Apply Stock Filter
+    if (filterStock === 'zerado') {
+      result = result.filter(r => r.estoqueTotal === 0);
+    } else if (filterStock === 'positivo') {
+      result = result.filter(r => r.estoqueTotal > 0);
+    }
+
     // Apply Sorting Options
     if (sortBy === 'estoqueDesc') {
       result.sort((a, b) => b.estoqueTotal - a.estoqueTotal);
@@ -189,7 +197,7 @@ export default function RelatoriosView({
     }
 
     return result;
-  }, [activeReport, productsDerived, reportPromoter, reportIndustry, reportAgency, reportStatus, sortBy, isPromotor, currentUser.promoterName]);
+  }, [activeReport, productsDerived, reportPromoter, reportIndustry, reportAgency, reportStatus, filterStock, sortBy, isPromotor, currentUser.promoterName]);
 
   // Aggregate Metrics for Active Report Layout
   const reportSummary = useMemo(() => {
@@ -314,7 +322,7 @@ export default function RelatoriosView({
     const csvContent = "\uFEFF" + [
       [`REDE ATACADÃO S.A. - FILIAL 172 CASCAVEL - DATA EMISSÃO: ${new Date().toLocaleDateString('pt-BR')}`],
       [`RELATÓRIO OPERACIONAL: ${activeReport.toUpperCase()}`],
-      [`Filtros aplicados: Data: ${selectedDate} | Promotor: ${reportPromoter} | Indústria: ${reportIndustry} | Agência: ${reportAgency} | Status: ${reportStatus} | Ordenação: ${sortBy}`],
+      [`Filtros aplicados: Data: ${selectedDate} | Promotor: ${reportPromoter} | Indústria: ${reportIndustry} | Agência: ${reportAgency} | Status: ${reportStatus} | Estoque: ${filterStock === 'todos' ? 'Todos' : filterStock === 'zerado' ? 'Apenas Estoque Zerado' : 'Apenas Estoque Disponível'} | Ordenação: ${sortBy}`],
       [],
       headers,
       ...rows
@@ -429,7 +437,7 @@ export default function RelatoriosView({
         </div>
 
         {/* Filters according to selected report */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4 pt-2">
           
           {/* Calendar Picker */}
           <div>
@@ -517,6 +525,20 @@ export default function RelatoriosView({
             </div>
           )}
 
+          {/* Stock Filter Option */}
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">FILTRAR ESTOQUE</label>
+            <select
+              value={filterStock}
+              onChange={(e) => setFilterStock(e.target.value as any)}
+              className="w-full px-3 py-2 bg-gray-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#F58220] text-gray-700 font-sans"
+            >
+              <option value="todos">Todos (Zerado + Ativo)</option>
+              <option value="zerado">Apenas Estoque Zerado</option>
+              <option value="positivo">Apenas Estoque Disponível (&gt; 0)</option>
+            </select>
+          </div>
+
           {/* Sorting Option */}
           <div>
             <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">ORDENAÇÃO OPERACIONAL</label>
@@ -534,7 +556,7 @@ export default function RelatoriosView({
           </div>
 
           {/* Export and Print Action Buttons */}
-          <div className="col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pt-4 border-t border-gray-100 mt-2">
+          <div className="col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-4 xl:col-span-7 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pt-4 border-t border-gray-100 mt-2">
             {/* Privacy toggle on the left */}
             <div className="flex items-center gap-2.5 bg-amber-50/50 border border-amber-200/50 px-4 py-2.5 rounded-xl self-start md:self-auto">
               <input
@@ -771,7 +793,7 @@ export default function RelatoriosView({
                       {/* ISV Detailed columns render */}
                       {activeReport === 'isv' && (
                         <>
-                          <td className="p-3 text-center font-mono font-bold text-gray-700 bg-gray-50/20">{row.estoqueTotal}</td>
+                          <td className="p-3 text-center font-mono font-bold text-gray-700 bg-gray-50/20">{row.product.estoqueFormatado || row.estoqueTotal}</td>
                           <td className="p-3 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
                           <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           {!hideFinancialValues && (
@@ -802,7 +824,7 @@ export default function RelatoriosView({
                       {/* Promoter Sub-columns */}
                       {activeReport === 'promotor' && (
                         <>
-                          <td className="p-3 text-center font-mono font-black text-gray-900 bg-gray-50/50">{row.estoqueTotal}</td>
+                          <td className="p-3 text-center font-mono font-black text-gray-900 bg-gray-50/50">{row.product.estoqueFormatado || row.estoqueTotal}</td>
                           <td className="p-3 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
                           <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           <td className="p-3 text-right">
@@ -814,7 +836,7 @@ export default function RelatoriosView({
                       {/* Industry Sub-columns */}
                       {activeReport === 'industria' && (
                         <>
-                          <td className="p-3 text-center font-mono font-bold text-gray-800">{row.estoqueTotal}</td>
+                          <td className="p-3 text-center font-mono font-bold text-gray-800">{row.product.estoqueFormatado || row.estoqueTotal}</td>
                           <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           <td className="p-3 font-extrabold text-gray-700">{row.promotor}</td>
                           <td className="p-3 text-right font-black uppercase text-[9px]">{row.classificacao}</td>
@@ -834,7 +856,7 @@ export default function RelatoriosView({
                       {/* Gerencial layout with average cost and valor total */}
                       {activeReport === 'gerencial' && (
                         <>
-                          <td className="p-3 text-center font-mono text-gray-600">{row.estoqueTotal}</td>
+                          <td className="p-3 text-center font-mono text-gray-600">{row.product.estoqueFormatado || row.estoqueTotal}</td>
                           <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           {!hideFinancialValues && <td className="p-3 text-right font-mono text-gray-600">R$ {row.product.custoMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
                           {!hideFinancialValues && <td className="p-3 text-right font-mono font-black text-gray-900 bg-orange-50/20">R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}

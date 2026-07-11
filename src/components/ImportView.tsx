@@ -6,7 +6,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product, Supplier, User, ImportHistoryEntry } from '../types';
-import { formatCnpj, normalizeProductCode, parseBrazilianFloat } from '../mockData';
+import { formatCnpj, normalizeProductCode, parseBrazilianFloat, parseEstoqueString } from '../mockData';
 import { 
   FileSpreadsheet, 
   UploadCloud, 
@@ -21,6 +21,23 @@ import {
   Trash2
 } from 'lucide-react';
 import { motion } from 'motion/react';
+
+function splitRowColumns(row: string): string[] {
+  if (!row) return [];
+  const trimmedRow = row.trim();
+  if (!trimmedRow) return [];
+  
+  if (trimmedRow.includes('\t')) {
+    return trimmedRow.split('\t').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+  }
+  if (trimmedRow.includes(';')) {
+    return trimmedRow.split(';').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+  }
+  if (trimmedRow.includes('|')) {
+    return trimmedRow.split('|').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+  }
+  return trimmedRow.split(',').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+}
 
 interface MappingIndices {
   iCodigo: number;
@@ -366,7 +383,7 @@ export default function ImportView({
       }
 
       // Check if first line contains headers or values
-      const firstRowCols = lines[0].split(/[\t,|;]/).map(c => c.trim());
+      const firstRowCols = splitRowColumns(lines[0]);
       const normalizedFirstRow = firstRowCols.map(h => 
         h.toLowerCase()
          .normalize("NFD")
@@ -421,7 +438,7 @@ export default function ImportView({
         }
 
         rows.forEach((row, rowIndex) => {
-          const cols = row.split(/[\t,|;]/).map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+          const cols = splitRowColumns(row);
           if (cols.length < 1 || !cols[0]) return; // Skip empty rows
 
           const rawCodigo = cols[iCodigo];
@@ -429,7 +446,8 @@ export default function ImportView({
           const codigo = normalizeProductCode(rawCodigo);
           const descricao = cols[iDescricao] || 'Sem descrição';
           const embalagem = cols[iEmbalagem] || 'UN';
-          const estoque = Math.max(0, parseInt(cols[iEstoque]) || 0);
+          const rawEstoque = cols[iEstoque] || '';
+          const estoque = Math.max(0, parseEstoqueString(rawEstoque));
           
           // Use robust BR/JS float parser to avoid removing dots from valid decimals
           const rawValor = cols[iValorDisponivel] || '0';
@@ -444,6 +462,7 @@ export default function ImportView({
             const updated = {
               ...updatedProductsList[existingIndex],
               estoque,
+              estoqueFormatado: rawEstoque.trim(),
               valorDisponivel,
               custoMedio,
               semVenda,
@@ -472,6 +491,7 @@ export default function ImportView({
               cnpjIndustria: guessedCnpj,
               nomeIndustria: nomeInd,
               estoque,
+              estoqueFormatado: rawEstoque.trim(),
               valorDisponivel,
               custoMedio,
               semVenda,
@@ -499,7 +519,7 @@ export default function ImportView({
         };
 
         // Parse rows to let the column sensor analyze cell data structures
-        const parsedRows = rows.map(row => row.split(/[\t,|;]/).map(c => c.trim().replace(/^"(.*)"$/, '$1'))).filter(r => r.length > 0 && r[0]);
+        const parsedRows = rows.map(row => splitRowColumns(row)).filter(r => r.length > 0 && r[0]);
 
         // Run data-level column detection
         const finalMapping = detectBasePrincipalColumns(parsedRows, fallbackMapping);
@@ -516,7 +536,7 @@ export default function ImportView({
         outputLog.push(`=> Descrição detectada na Coluna ${iDescricao + 1}`);
 
         rows.forEach((row, rowIndex) => {
-          const cols = row.split(/[\t,|;]/).map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+          const cols = splitRowColumns(row);
           if (cols.length < 1 || !cols[0]) return;
 
           const rawCodigo = cols[iCodigo];
@@ -671,7 +691,7 @@ export default function ImportView({
             <div>
               {importType === 'EstoqueDiario' ? (
                 <span>
-                  <strong>Importação Diária de Estoque</strong>: Atualiza as colunas de fardos (<strong>Emb1</strong>), unidades avulsas (<strong>Emb9</strong>), <strong>Custo Médio</strong> e <strong>SemVenda</strong> de códigos existentes. Códigos desconhecidos inseridos herdarão promotores mapeados por indústria automaticamente.
+                  <strong>Importação Diária de Estoque</strong>: Atualiza as colunas de <strong>Estoque</strong> (com suporte a formatos complexos), <strong>Valor Disponível</strong>, <strong>SemVenda</strong> e <strong>Idade</strong> de códigos existentes. Códigos desconhecidos inseridos herdarão promotores mapeados por indústria automaticamente.
                 </span>
               ) : (
                 <span>
@@ -752,7 +772,7 @@ export default function ImportView({
               className="w-full font-mono text-[11px] p-4 border rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#F58220]/20 disabled:opacity-60 text-gray-800"
               placeholder={
                 importType === 'EstoqueDiario'
-                  ? 'Abra o Excel, copie colunas Código / Descrição / Embalagem / Estoque Emb1 / Estoque Emb9 / Custo Médio / SemVenda e cole aqui...'
+                  ? 'Abra o Excel, copie colunas Código / Descrição / Embalagem / Estoque / Valor Disponível / SemVenda / Idade e cole aqui...'
                   : 'Abra a listagem de mercadorias no Excel, copie colunas Código / Descrição / Embalagem / CNPJ Indústria / Nome Indústria e cole aqui...'
               }
             />
@@ -820,7 +840,7 @@ export default function ImportView({
 
             <div className="bg-gray-50 p-3 rounded-lg border text-[11px] font-mono text-gray-600 space-y-1">
               <div className="font-bold text-[#F58220]">Colunas de Estoque:</div>
-              <p>Código | Descrição | Embalagem | Emb1 | Emb9 | Custo | SemVenda</p>
+              <p>Código | Descrição | Embalagem | Estoque | Valor Disponível | SemVenda | Idade</p>
               <div className="mt-2 font-bold text-[#F58220]">Colunas de Cadastro:</div>
               <p>Código | Descrição | Embalagem | CNPJ | Nome Indústria</p>
             </div>

@@ -166,6 +166,58 @@ export function normalizeProductCode(code: string): string {
 }
 
 /**
+ * Parses the complex "Estoque" column format into a total decimal or integer unit count.
+ * Examples:
+ * - "126 CXA (4)" -> 126 * 4 = 504 units
+ * - "96 CXA (24) + 9" -> 96 * 24 + 9 = 2313 units
+ * - "111 BDJ (6)" -> 111 * 6 = 666 units
+ * - "110 KG (1.000)" -> 110 kg
+ * - "199 KG (1.000) + 560" -> 199 + (560 / 1000) = 199.56 kg
+ */
+export function parseEstoqueString(estoqueStr: string): number {
+  if (estoqueStr === undefined || estoqueStr === null) return 0;
+  const cleaned = String(estoqueStr).trim().replace(/\s+/g, ' ').toUpperCase();
+  if (!cleaned) return 0;
+
+  // Pattern: (Quantity) (Unit) (Multiplier in parens) followed optionally by "+" (Remainder)
+  // Group 1: Qty (digits)
+  // Group 2: Unit (e.g. CXA, BDJ, KG, FD, PCT, UN)
+  // Group 3: Multiplier (digits, can contain dot/comma like 1.000)
+  // Group 4: optional "+ Remainder" (digits)
+  const regex = /^(\d+)\s+([A-Z]+)\s*\(?([\d.,]+)\)?(?:\s*\+\s*(\d+))?$/;
+  const match = cleaned.match(regex);
+
+  if (match) {
+    const qty = parseInt(match[1], 10);
+    const unit = match[2];
+    const multStr = match[3].replace(/[^\d]/g, ''); // "1.000" -> "1000", "24" -> "24"
+    const multiplier = parseFloat(multStr) || 1;
+    const remainder = match[4] ? parseInt(match[4], 10) : 0;
+
+    if (unit === 'KG') {
+      // For KG, the multiplier represents grams in a kg (1000). The remainder is added as a fraction of kg.
+      const divisor = multiplier > 1 ? multiplier : 1000;
+      return qty + (remainder / divisor);
+    } else {
+      // For packaged products, total units = quantity of packages * multiplier + remainder units
+      return (qty * multiplier) + remainder;
+    }
+  }
+
+  // Fallback pattern without multiplier or parentheses: "126 CXA" or "199 KG" or "100 UN"
+  const regexSimple = /^(\d+)\s*([A-Z]+)$/;
+  const matchSimple = cleaned.match(regexSimple);
+  if (matchSimple) {
+    return parseInt(matchSimple[1], 10);
+  }
+
+  // Fallback to standard float parsing
+  const sanitized = cleaned.replace(/\./g, '').replace(',', '.');
+  const num = parseFloat(sanitized);
+  return isNaN(num) ? 0 : num;
+}
+
+/**
  * Parses a float string formatted in either standard JS format or Brazilian format (comma decimal).
  * Safely handles R$ symbols, spaces, thousands separators, and single decimals.
  */

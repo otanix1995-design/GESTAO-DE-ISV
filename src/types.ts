@@ -22,6 +22,7 @@ export interface Product {
   
   // Daily inventory indicators
   estoque: number; // Estoque
+  estoqueFormatado?: string; // Formato original de estoque (Ex: 126 CXA (4) ou 199 KG (1.000) + 560)
   valorDisponivel: number; // Valor Disponível em R$
   custoMedio: number;
   semVenda: number;    // Dias sem venda
