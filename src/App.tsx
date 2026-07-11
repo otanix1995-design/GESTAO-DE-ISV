@@ -83,17 +83,85 @@ export default function App() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
-  // 1. Establish Real-Time Synchronization with Firebase Firestore
+  // 1. Establish Real-Time Synchronization with Firebase Firestore and Load Initial Data
   useEffect(() => {
+    let isMounted = true;
+
+    // Load initial state from local Express server backup (which has NO size limit and is 100% reliable)
+    fetch('/api/data')
+      .then(res => res.json())
+      .then(res => {
+        if (!isMounted) return;
+        
+        let s = null;
+        if (res && res.data && Object.keys(res.data).length > 0) {
+          s = res.data;
+        } else {
+          s = getSavedData();
+        }
+
+        if (Array.isArray(s.products)) {
+          const cleaned = s.products.map((p: any) => ({
+            ...p,
+            codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
+          }));
+          setProducts(cleaned);
+        }
+        if (Array.isArray(s.suppliers)) {
+          setSuppliers(s.suppliers);
+        }
+        if (Array.isArray(s.promoters)) {
+          setPromoters(s.promoters);
+        }
+        if (Array.isArray(s.agencies)) {
+          setAgencies(s.agencies);
+        }
+        if (Array.isArray(s.supHistory)) {
+          setSupHistory(s.supHistory);
+        }
+        if (Array.isArray(s.impHistory)) {
+          setImpHistory(s.impHistory);
+        }
+        if (s.lastUpdateTime) {
+          setLastUpdateTime(s.lastUpdateTime);
+          lastUpdateTimeRef.current = s.lastUpdateTime;
+        }
+        setHasLoadedFromServer(true);
+      })
+      .catch(err => {
+        console.error("Erro no carregamento primário do Express server:", err);
+        if (!isMounted) return;
+        
+        // LocalStorage fallback
+        const s = getSavedData();
+        if (Array.isArray(s.products)) {
+          const cleaned = s.products.map((p: any) => ({
+            ...p,
+            codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
+          }));
+          setProducts(cleaned);
+        }
+        if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
+        if (Array.isArray(s.promoters)) setPromoters(s.promoters);
+        if (Array.isArray(s.agencies)) setAgencies(s.agencies);
+        if (Array.isArray(s.supHistory)) setSupHistory(s.supHistory);
+        if (Array.isArray(s.impHistory)) setImpHistory(s.impHistory);
+        if (s.lastUpdateTime) {
+          setLastUpdateTime(s.lastUpdateTime);
+          lastUpdateTimeRef.current = s.lastUpdateTime;
+        }
+        setHasLoadedFromServer(true);
+      });
+
     const docRef = doc(db, 'state', 'current');
     
     // Subscribe to real-time changes
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (!isMounted) return;
       if (snapshot.exists()) {
         const s = snapshot.data();
         
         // Skip updating local state if the snapshot contains pending writes from this client.
-        // This avoids cursor jumps or overwrite issues during rapid input sessions.
         if (snapshot.metadata.hasPendingWrites) {
           return;
         }
@@ -102,18 +170,21 @@ export default function App() {
         const localTime = Date.parse(lastUpdateTimeRef.current || '2026-06-04T07:30:00Z');
         const serverTime = s.lastUpdateTime ? Date.parse(s.lastUpdateTime) : 0;
 
-        if (serverTime > 0 && localTime > serverTime) {
-          console.log("Local state is newer than Firestore snapshot. Skipping snapshot write to local state.");
-          setHasLoadedFromServer(true);
+        if (serverTime > 0 && localTime >= serverTime) {
+          console.log("Local state is newer or equal to Firestore snapshot. Skipping snapshot write to local state.");
           return;
         }
 
-        // Skip updating local state if a local change was made very recently (to prevent overwriting local edits during sync delays or quota errors)
+        // Skip updating local state if a local change was made very recently
         if (Date.now() - lastLocalChangeTime.current < 5000) {
           return;
         }
 
-        if (Array.isArray(s.products)) {
+        // Only synchronize products list from Firestore if it is actually populated.
+        // If it is empty, it probably represents a write failure due to Firestore 1MB limits.
+        // We only allow empty list if it's explicitly a database reset (timestamp '2026-06-04T07:30:00Z')
+        const isReset = s.lastUpdateTime === '2026-06-04T07:30:00Z';
+        if (Array.isArray(s.products) && (s.products.length > 0 || isReset)) {
           const cleaned = s.products.map((p: any) => ({
             ...p,
             codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
@@ -141,65 +212,13 @@ export default function App() {
         if (s.lastUpdateTime) {
           setLastUpdateTime(prev => prev === s.lastUpdateTime ? prev : s.lastUpdateTime);
         }
-      } else {
-        // If the Firestore document does not exist yet, seed it with local/initial data
-        console.log("Firestore state empty. Seeding with local or initial mock data.");
-        const localDefaults = getSavedData();
-        const cleanedDefaultsProducts = (localDefaults.products || []).map((p: any) => ({
-          ...p,
-          codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
-        }));
-        setDoc(docRef, {
-          products: cleanedDefaultsProducts,
-          suppliers: localDefaults.suppliers || [],
-          promoters: localDefaults.promoters || [],
-          agencies: localDefaults.agencies || [],
-          supHistory: localDefaults.supHistory || [],
-          impHistory: localDefaults.impHistory || [],
-          lastUpdateTime: localDefaults.lastUpdateTime || '2026-06-04T07:30:00Z'
-        }).catch(err => console.error("Erro ao inicializar base no Firestore:", err));
       }
-      setHasLoadedFromServer(true);
     }, (error) => {
       console.error("Erro no listener em tempo real do Firestore:", error);
-      // Fallback: load state from Node Express server backup (db.json)
-      fetch('/api/data')
-        .then(res => res.json())
-        .then(res => {
-          if (res && res.data) {
-            const s = res.data;
-            if (Array.isArray(s.products) && s.products.length > 0) {
-              const cleaned = s.products.map((p: any) => ({
-                ...p,
-                codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
-              }));
-              setProducts(cleaned);
-            }
-            if (Array.isArray(s.suppliers) && s.suppliers.length > 0) {
-              setSuppliers(s.suppliers);
-            }
-            if (Array.isArray(s.promoters) && s.promoters.length > 0) {
-              setPromoters(s.promoters);
-            }
-            if (Array.isArray(s.agencies) && s.agencies.length > 0) {
-              setAgencies(s.agencies);
-            }
-            if (Array.isArray(s.supHistory)) {
-              setSupHistory(s.supHistory);
-            }
-            if (Array.isArray(s.impHistory)) {
-              setImpHistory(s.impHistory);
-            }
-          }
-          setHasLoadedFromServer(true);
-        })
-        .catch(err => {
-          console.error("Erro no fallback do Express server:", err);
-          setHasLoadedFromServer(true);
-        });
     });
 
     return () => {
+      isMounted = false;
       unsubscribe();
     };
   }, []);
