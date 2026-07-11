@@ -165,6 +165,30 @@ export function normalizeProductCode(code: string): string {
   return trimmed || '0';
 }
 
+/**
+ * Parses a float string formatted in either standard JS format or Brazilian format (comma decimal).
+ * Safely handles R$ symbols, spaces, thousands separators, and single decimals.
+ */
+export function parseBrazilianFloat(val: any): number {
+  if (val === undefined || val === null) return 0;
+  if (typeof val === 'number') return val;
+  
+  let str = String(val).trim();
+  if (!str) return 0;
+  
+  // Clean currency symbol and whitespace
+  str = str.replace('R$', '').replace(/\s/g, '');
+  
+  // If there's a comma, it's Brazilian formatting
+  if (str.includes(',')) {
+    // Remove dots as thousands separators, then replace comma with dot
+    str = str.replace(/\./g, '').replace(',', '.');
+  }
+  
+  const parsed = parseFloat(str);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 // Business Rules Derived Fields Generator for Products
 export interface ProductDerived {
   product: Product;

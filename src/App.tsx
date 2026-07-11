@@ -92,19 +92,39 @@ export default function App() {
           return;
         }
 
+        // Skip updating local state if a local change was made very recently (to prevent overwriting local edits during sync delays or quota errors)
+        if (Date.now() - lastLocalChangeTime.current < 5000) {
+          return;
+        }
+
         if (Array.isArray(s.products)) {
           const cleaned = s.products.map((p: any) => ({
             ...p,
             codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
           }));
-          setProducts(cleaned);
+          setProducts(prev => {
+            const isSame = JSON.stringify(prev) === JSON.stringify(cleaned);
+            return isSame ? prev : cleaned;
+          });
         }
-        if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
-        if (Array.isArray(s.promoters)) setPromoters(s.promoters);
-        if (Array.isArray(s.agencies)) setAgencies(s.agencies);
-        if (Array.isArray(s.supHistory)) setSupHistory(s.supHistory);
-        if (Array.isArray(s.impHistory)) setImpHistory(s.impHistory);
-        if (s.lastUpdateTime) setLastUpdateTime(s.lastUpdateTime);
+        if (Array.isArray(s.suppliers)) {
+          setSuppliers(prev => JSON.stringify(prev) === JSON.stringify(s.suppliers) ? prev : s.suppliers);
+        }
+        if (Array.isArray(s.promoters)) {
+          setPromoters(prev => JSON.stringify(prev) === JSON.stringify(s.promoters) ? prev : s.promoters);
+        }
+        if (Array.isArray(s.agencies)) {
+          setAgencies(prev => JSON.stringify(prev) === JSON.stringify(s.agencies) ? prev : s.agencies);
+        }
+        if (Array.isArray(s.supHistory)) {
+          setSupHistory(prev => JSON.stringify(prev) === JSON.stringify(s.supHistory) ? prev : s.supHistory);
+        }
+        if (Array.isArray(s.impHistory)) {
+          setImpHistory(prev => JSON.stringify(prev) === JSON.stringify(s.impHistory) ? prev : s.impHistory);
+        }
+        if (s.lastUpdateTime) {
+          setLastUpdateTime(prev => prev === s.lastUpdateTime ? prev : s.lastUpdateTime);
+        }
       } else {
         // If the Firestore document does not exist yet, seed it with local/initial data
         console.log("Firestore state empty. Seeding with local or initial mock data.");

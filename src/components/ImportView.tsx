@@ -6,7 +6,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product, Supplier, User, ImportHistoryEntry } from '../types';
-import { formatCnpj, normalizeProductCode } from '../mockData';
+import { formatCnpj, normalizeProductCode, parseBrazilianFloat } from '../mockData';
 import { 
   FileSpreadsheet, 
   UploadCloud, 
@@ -431,9 +431,9 @@ export default function ImportView({
           const embalagem = cols[iEmbalagem] || 'UN';
           const estoque = Math.max(0, parseInt(cols[iEstoque]) || 0);
           
-          // Cleaner cost parser that supports multi-formats
+          // Use robust BR/JS float parser to avoid removing dots from valid decimals
           const rawValor = cols[iValorDisponivel] || '0';
-          const valorDisponivel = Math.max(0, parseFloat(rawValor.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.')) || 0);
+          const valorDisponivel = Math.max(0, parseBrazilianFloat(rawValor));
           const custoMedio = estoque > 0 ? (valorDisponivel / estoque) : 0;
           const semVenda = Math.max(0, parseInt(cols[iSemVenda]) || 0);
           const idade = Math.max(0, parseInt(cols[iIdade]) || 0);
