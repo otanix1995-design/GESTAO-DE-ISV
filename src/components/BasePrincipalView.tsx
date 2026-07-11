@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Product, Supplier, User } from '../types';
-import { computeProductDerived, formatCnpj, fetchCnpjData } from '../mockData';
+import { computeProductDerived, formatCnpj, fetchCnpjData, normalizeProductCode } from '../mockData';
 import { 
   Search, 
   Plus, 
@@ -133,9 +133,11 @@ export default function BasePrincipalView({
     // 2. Global search + Local search aggregation
     const activeQuery = (globalSearchQuery || localSearch).trim().toLowerCase();
     if (activeQuery) {
+      const cleanQuery = activeQuery.replace(/^0+/, '');
       result = result.filter(d => {
         return (
           d.product.codigo.toLowerCase().includes(activeQuery) ||
+          (cleanQuery && d.product.codigo.toLowerCase().includes(cleanQuery)) ||
           d.product.descricao.toLowerCase().includes(activeQuery) ||
           d.product.cnpjIndustria.replace(/[^\d]/g, '').includes(activeQuery.replace(/[^\d]/g, '').trim()) ||
           d.nomeIndustria.toLowerCase().includes(activeQuery) ||
@@ -260,23 +262,26 @@ export default function BasePrincipalView({
       return;
     }
 
+    const cleanCode = normalizeProductCode(newCode);
+
     // Verify code uniqueness: "Inclusão somente para novos itens"
-    const codeExists = products.some(p => p.codigo.trim() === newCode.trim());
+    const codeExists = products.some(p => p.codigo === cleanCode);
     if (codeExists) {
-      setAddError(`Conflito: O código [${newCode}] já existe na base de dados da filial e não pode ser sobrescrito.`);
+      setAddError(`Conflito: O código [${cleanCode}] já existe na base de dados da filial e não pode ser sobrescrito.`);
       return;
     }
 
     const newProd: Product = {
-      codigo: newCode.trim(),
+      codigo: cleanCode,
       descricao: newDesc.trim().toUpperCase(),
       embalagem: newEmb.trim().toUpperCase(),
       cnpjIndustria: newCnpj.trim(),
       nomeIndustria: newIndName.trim(),
-      estoqueEmb1: 0,
-      estoqueEmb9: 0,
+      estoque: 0,
+      valorDisponivel: 0,
       custoMedio: 0,
-      semVenda: 0
+      semVenda: 0,
+      idade: 0
     };
 
     setProducts([newProd, ...products]);

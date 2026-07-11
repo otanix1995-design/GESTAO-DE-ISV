@@ -21,10 +21,11 @@ export interface Product {
   nomeIndustria: string;
   
   // Daily inventory indicators
-  estoqueEmb1: number; // Caixa/fardo fechado
-  estoqueEmb9: number; // Unidade aberta
+  estoque: number; // Estoque
+  valorDisponivel: number; // Valor Disponível em R$
   custoMedio: number;
   semVenda: number;    // Dias sem venda
+  idade?: number;      // Idade
 }
 
 export interface Supplier {

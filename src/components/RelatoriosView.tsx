@@ -221,17 +221,16 @@ export default function RelatoriosView({
 
     if (activeReport === 'isv') {
       headers = hideFinancialValues
-        ? ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO']
-        : ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'VALOR ESTOQUE (R$)', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO'];
+        ? ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'IDADE (DIAS)', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO']
+        : ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'IDADE (DIAS)', 'VALOR ESTOQUE (R$)', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO'];
       rows = reportData.map(d => hideFinancialValues
         ? [
             d.product.codigo,
             d.product.descricao,
             d.product.embalagem,
-            d.product.estoqueEmb1.toString(),
-            d.product.estoqueEmb9.toString(),
             d.estoqueTotal.toString(),
             d.product.semVenda.toString(),
+            (d.product.idade || 0).toString(),
             d.nomeIndustria,
             d.promotor,
             d.classificacao
@@ -240,10 +239,9 @@ export default function RelatoriosView({
             d.product.codigo,
             d.product.descricao,
             d.product.embalagem,
-            d.product.estoqueEmb1.toString(),
-            d.product.estoqueEmb9.toString(),
             d.estoqueTotal.toString(),
             d.product.semVenda.toString(),
+            (d.product.idade || 0).toString(),
             d.valorEstoque.toFixed(2),
             d.nomeIndustria,
             d.promotor,
@@ -251,26 +249,24 @@ export default function RelatoriosView({
           ]
       );
     } else if (activeReport === 'promotor') {
-      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'SEM VENDA (DIAS)', 'STATUS'];
+      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'SEM VENDA (DIAS)', 'IDADE (DIAS)', 'STATUS'];
       rows = reportData.map(d => [
         d.product.codigo,
         d.product.descricao,
         d.product.embalagem,
-        d.product.estoqueEmb1.toString(),
-        d.product.estoqueEmb9.toString(),
         d.estoqueTotal.toString(),
         d.product.semVenda.toString(),
+        (d.product.idade || 0).toString(),
         d.classificacao
       ]);
     } else if (activeReport === 'industria') {
-      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'STATUS', 'PROMOTOR', 'AGÊNCIA'];
+      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'IDADE (DIAS)', 'STATUS', 'PROMOTOR', 'AGÊNCIA'];
       rows = reportData.map(d => [
         d.product.codigo,
         d.product.descricao,
         d.product.embalagem,
-        d.product.estoqueEmb1.toString(),
-        d.product.estoqueEmb9.toString(),
         d.estoqueTotal.toString(),
+        (d.product.idade || 0).toString(),
         d.classificacao,
         d.promotor,
         d.agencia
@@ -288,16 +284,15 @@ export default function RelatoriosView({
       ]);
     } else if (activeReport === 'gerencial') {
       headers = hideFinancialValues
-        ? ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'STATUS', 'PROMOTOR']
-        : ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE EMB1', 'ESTOQUE EMB9', 'ESTOQUE TOTAL', 'CUSTO MÉDIO (R$)', 'VALOR ESTOQUE (R$)', 'STATUS', 'PROMOTOR'];
+        ? ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'IDADE (DIAS)', 'STATUS', 'PROMOTOR']
+        : ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'IDADE (DIAS)', 'CUSTO MÉDIO (R$)', 'VALOR ESTOQUE (R$)', 'STATUS', 'PROMOTOR'];
       rows = reportData.map(d => hideFinancialValues
         ? [
             d.product.codigo,
             d.product.descricao,
             d.product.embalagem,
-            d.product.estoqueEmb1.toString(),
-            d.product.estoqueEmb9.toString(),
             d.estoqueTotal.toString(),
+            (d.product.idade || 0).toString(),
             d.classificacao,
             d.promotor
           ]
@@ -305,9 +300,8 @@ export default function RelatoriosView({
             d.product.codigo,
             d.product.descricao,
             d.product.embalagem,
-            d.product.estoqueEmb1.toString(),
-            d.product.estoqueEmb9.toString(),
             d.estoqueTotal.toString(),
+            (d.product.idade || 0).toString(),
             d.product.custoMedio.toFixed(2),
             d.valorEstoque.toFixed(2),
             d.classificacao,
@@ -685,18 +679,16 @@ export default function RelatoriosView({
                   <>
                     <th className="p-3 text-center cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('estoqueDesc')}>
                       <div className="flex items-center justify-center gap-1">
-                        EMB1 {sortBy === 'estoqueDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
-                      </div>
-                    </th>
-                    <th className="p-3 text-center cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('estoqueDesc')}>
-                      <div className="flex items-center justify-center gap-1">
-                        EMB9 {sortBy === 'estoqueDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
+                        Estoque Total {sortBy === 'estoqueDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
                       </div>
                     </th>
                     <th className="p-3 text-center cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('semVendaDesc')}>
                       <div className="flex items-center justify-center gap-1">
                         Dias Sem Venda {sortBy === 'semVendaDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
                       </div>
+                    </th>
+                    <th className="p-3 text-center">
+                      Idade (Dias)
                     </th>
                     {!hideFinancialValues && (
                       <th className="p-3 text-right cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('valorDesc')}>
@@ -714,19 +706,17 @@ export default function RelatoriosView({
                 {/* Specific layouts according to other sub-report constraints */}
                 {activeReport === 'promotor' && (
                   <>
-                    <th className="p-3 text-center">Fardos (Emb1)</th>
-                    <th className="p-3 text-center">Unids (Emb9)</th>
                     <th className="p-3 text-center">Estoque Total</th>
                     <th className="p-3 text-center">Inativo (SemVenda)</th>
+                    <th className="p-3 text-center">Idade (Dias)</th>
                     <th className="p-3 text-right">Classificação</th>
                   </>
                 )}
 
                 {activeReport === 'industria' && (
                   <>
-                    <th className="p-3 text-center">Estoque Emb1</th>
-                    <th className="p-3 text-center">Estoque Emb9</th>
-                    <th className="p-3 text-center">Total</th>
+                    <th className="p-3 text-center">Estoque Total</th>
+                    <th className="p-3 text-center">Idade (Dias)</th>
                     <th className="p-3">Promotor Autorizado</th>
                     <th className="p-3 text-right font-bold">Classificação</th>
                   </>
@@ -743,8 +733,8 @@ export default function RelatoriosView({
 
                 {activeReport === 'gerencial' && (
                   <>
-                    <th className="p-3 text-center">Emb1</th>
-                    <th className="p-3 text-center">Emb9</th>
+                    <th className="p-3 text-center">Estoque Total</th>
+                    <th className="p-3 text-center">Idade (Dias)</th>
                     {!hideFinancialValues && <th className="p-3 text-right">Custo Unit</th>}
                     {!hideFinancialValues && <th className="p-3 text-right">Valor Ativo</th>}
                     <th className="p-3">Promotor</th>
@@ -761,7 +751,7 @@ export default function RelatoriosView({
                     colSpan={
                       activeReport === 'isv' 
                         ? (hideFinancialValues ? 9 : 10) 
-                        : (activeReport === 'gerencial' ? (hideFinancialValues ? 6 : 8) : 8)
+                        : (activeReport === 'gerencial' ? (hideFinancialValues ? 7 : 9) : 8)
                     } 
                     className="text-center py-10 text-gray-400 font-bold"
                   >
@@ -781,9 +771,9 @@ export default function RelatoriosView({
                       {/* ISV Detailed columns render */}
                       {activeReport === 'isv' && (
                         <>
-                          <td className="p-3 text-center font-mono font-bold text-gray-700 bg-gray-50/20">{row.product.estoqueEmb1}</td>
-                          <td className="p-3 text-center font-mono text-gray-750 bg-gray-50/20">{row.product.estoqueEmb9}</td>
+                          <td className="p-3 text-center font-mono font-bold text-gray-700 bg-gray-50/20">{row.estoqueTotal}</td>
                           <td className="p-3 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
+                          <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           {!hideFinancialValues && (
                             <td className="p-3 text-right font-mono font-black text-gray-900">
                               R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -812,10 +802,9 @@ export default function RelatoriosView({
                       {/* Promoter Sub-columns */}
                       {activeReport === 'promotor' && (
                         <>
-                          <td className="p-3 text-center font-mono font-bold text-gray-700">{row.product.estoqueEmb1}</td>
-                          <td className="p-3 text-center font-mono text-gray-750">{row.product.estoqueEmb9}</td>
                           <td className="p-3 text-center font-mono font-black text-gray-900 bg-gray-50/50">{row.estoqueTotal}</td>
                           <td className="p-3 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
+                          <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           <td className="p-3 text-right">
                             <span className="font-extrabold text-[10px] uppercase text-gray-700">{row.classificacao}</span>
                           </td>
@@ -825,9 +814,8 @@ export default function RelatoriosView({
                       {/* Industry Sub-columns */}
                       {activeReport === 'industria' && (
                         <>
-                          <td className="p-3 text-center font-mono">{row.product.estoqueEmb1}</td>
-                          <td className="p-3 text-center font-mono">{row.product.estoqueEmb9}</td>
                           <td className="p-3 text-center font-mono font-bold text-gray-800">{row.estoqueTotal}</td>
+                          <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           <td className="p-3 font-extrabold text-gray-700">{row.promotor}</td>
                           <td className="p-3 text-right font-black uppercase text-[9px]">{row.classificacao}</td>
                         </>
@@ -846,8 +834,8 @@ export default function RelatoriosView({
                       {/* Gerencial layout with average cost and valor total */}
                       {activeReport === 'gerencial' && (
                         <>
-                          <td className="p-3 text-center font-mono text-gray-600">{row.product.estoqueEmb1}</td>
-                          <td className="p-3 text-center font-mono text-gray-600">{row.product.estoqueEmb9}</td>
+                          <td className="p-3 text-center font-mono text-gray-600">{row.estoqueTotal}</td>
+                          <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           {!hideFinancialValues && <td className="p-3 text-right font-mono text-gray-600">R$ {row.product.custoMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
                           {!hideFinancialValues && <td className="p-3 text-right font-mono font-black text-gray-900 bg-orange-50/20">R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
                           <td className="p-3 font-bold text-gray-700">{row.promotor}</td>

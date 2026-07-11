@@ -152,6 +152,19 @@ export function saveData(data: {
   }
 }
 
+/**
+ * Normalizes a product code according to the system rules:
+ * - Strip leading zeros
+ * - Remove hyphen followed by anything (e.g. -110)
+ */
+export function normalizeProductCode(code: string): string {
+  if (!code) return '';
+  let trimmed = String(code).trim();
+  trimmed = trimmed.replace(/^0+/, '');
+  trimmed = trimmed.split('-')[0];
+  return trimmed || '0';
+}
+
 // Business Rules Derived Fields Generator for Products
 export interface ProductDerived {
   product: Product;
@@ -189,21 +202,13 @@ export function computeProductDerived(product: Product, suppliers: Supplier[]): 
   const nomeIndustria = product ? (product.nomeIndustria || 'Indústria Desconhecida') : 'Indústria Desconhecida';
 
   // 2. Fórmulas de estoque (with default null/undefined checks)
-  const estEmb1 = product && typeof product.estoqueEmb1 === 'number' ? product.estoqueEmb1 : 0;
-  const estEmb9 = product && typeof product.estoqueEmb9 === 'number' ? product.estoqueEmb9 : 0;
-  const cMedio = product && typeof product.custoMedio === 'number' ? product.custoMedio : 0;
-
-  const estoqueTotal = estEmb1 + estEmb9;
-  const valorEstoque = estoqueTotal * cMedio;
-
+  const estoqueTotal = product && typeof product.estoque === 'number' ? product.estoque : 0;
+  const valorEstoque = product && typeof product.valorDisponivel === 'number' ? product.valorDisponivel : 0;
+  
   // 3. Classificações Base
   let status: 'Normal' | 'Abastecer' | 'Atenção' | 'Ruptura' = 'Ruptura';
-  if (estEmb1 > 0 && estEmb9 > 0) {
+  if (estoqueTotal > 0) {
     status = 'Normal';
-  } else if (estEmb1 > 0 && estEmb9 === 0) {
-    status = 'Abastecer';
-  } else if (estEmb1 === 0 && estEmb9 > 0) {
-    status = 'Atenção';
   } else {
     status = 'Ruptura';
   }
@@ -215,7 +220,7 @@ export function computeProductDerived(product: Product, suppliers: Supplier[]): 
   const classificacao = isPossivelAjuste ? 'Possível Ajuste' : status;
 
   return {
-    product: product || { codigo: '?', descricao: 'Inválido', embalagem: '?', cnpjIndustria: '', nomeIndustria: 'Inválido', estoqueEmb1: 0, estoqueEmb9: 0, custoMedio: 0, semVenda: 0 },
+    product: product || { codigo: '?', descricao: 'Inválido', embalagem: '?', cnpjIndustria: '', nomeIndustria: 'Inválido', estoque: 0, valorDisponivel: 0, custoMedio: 0, semVenda: 0 },
     estoqueTotal,
     valorEstoque,
     status,
@@ -272,7 +277,15 @@ export function calculateSystemStats(products: Product[], suppliers: Supplier[],
  * Formats a raw input string to a standard Brazilian CNPJ: XX.XXX.XXX/XXXX-XX
  */
 export function formatCnpj(val: string): string {
-  const clean = val.replace(/[^\d]/g, '').slice(0, 14);
+  let clean = val.replace(/[^\d]/g, '');
+  if (!clean) return '';
+  // Pad with leading zeros if truncated by numeric systems (e.g., Excel)
+  if (clean.length === 13) {
+    clean = '0' + clean;
+  } else if (clean.length === 12) {
+    clean = '00' + clean;
+  }
+  clean = clean.slice(0, 14);
   if (clean.length <= 2) return clean;
   if (clean.length <= 5) return `${clean.slice(0, 2)}.${clean.slice(2)}`;
   if (clean.length <= 8) return `${clean.slice(0, 2)}.${clean.slice(2, 5)}.${clean.slice(5)}`;

@@ -6,6 +6,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product, Supplier, User, ImportHistoryEntry } from '../types';
+import { formatCnpj, normalizeProductCode } from '../mockData';
 import { 
   FileSpreadsheet, 
   UploadCloud, 
@@ -317,20 +318,21 @@ export default function ImportView({
 
   // Delimited templates that users can easily copy-paste or pre-fill with a button
   const ESTOQUE_TEMPLATE = 
-`Código	Descrição Mercadoria	Embalagem	Estoque Emb1	Estoque Emb9	Custo Médio	SemVenda
-100101	REFRIGERADO HAMBURGUER SEARA BOV 120G	CX 36 UN	50	24	1.90	0
-100103	LASANHA SEARA BOLONHESA 600G	CX 12 UN	10	5	11.35	0
-100104	PRESUNTO SEARA COZIDO RESFRIADO KG	CX 2 PC	8	1	19.80	0
-200203	CERVEJA SPATEN PURO MALTE LT 350ML	FD 12 UN	300	48	3.40	0
-300304	SABAO LIQUIDO OMO PROTECAO FRASCO 3L	CX 4 UN	25	4	34.20	0
-999901	NOVO PRODUTO TESTE DE IMPORTACAO	CX 10 UN	15	0	4.50	1`;
+`Código	Descrição Mercadoria	Complemento	Valor Disponível	Estoque	Dias sem venda	Idade
+2488	REFRIGERADO HAMBURGUER SEARA BOV 120G	CX 36 UN	R$ 142,50	75	0	12
+100103	LASANHA SEARA BOLONHESA 600G	CX 12 UN	R$ 170,25	15	3	5
+100104	PRESUNTO SEARA COZIDO RESFRIADO KG	CX 2 PC	R$ 178,20	9	0	2
+200203	CERVEJA SPATEN PURO MALTE LT 350ML	FD 12 UN	R$ 1.183,20	348	0	10
+300304	SABAO LIQUIDO OMO PROTECAO FRASCO 3L	CX 4 UN	R$ 991,80	29	0	8
+999901	NOVO PRODUTO TESTE DE IMPORTACAO	CX 10 UN	R$ 67,50	15	1	15`;
 
   const BASE_PRINCIPAL_TEMPLATE = 
-`Código	Descrição	Embalagem	Fornecedor	Razão Social
-100106	LOMBO SUINO FATIADO SEARA 1KG	CX 10 PC	02.916.265/0001-60	JBS S.A (Friboi & Seara)
-200206	CERVEJA ORIGINAL GARRAFA LP 600ML	CX 12 GF	03.016.124/0001-50	Ambev S.A (Bebidas)
-300306	SOPINHA Knorr CARNE E LEGUMES 200G	CX 12 UN	61.068.276/0001-04	Unilever Brasil Ltda
-400406	NUTELLA POTE RECHEIO CREME AVELA 350G	CX 12 UN	60.398.369/0001-85	Nestlé Brasil Ltda`;
+`Fornecedor	Razão Social	Código	Descrição
+02.916.265/0001-60	JBS S.A (Friboi & Seara)	00002488-110	REFRIGERADO HAMBURGUER SEARA BOV 120G
+02.916.265/0001-60	JBS S.A (Friboi & Seara)	00001001-030	LASANHA SEARA BOLONHESA 600G
+02.916.265/0001-60	JBS S.A (Friboi & Seara)	00001001-040	PRESUNTO SEARA COZIDO RESFRIADO KG
+03.016.124/0001-50	Ambev S.A (Bebidas)	00002002-030	CERVEJA SPATEN PURO MALTE LT 350ML
+61.068.276/0001-04	Unilever Brasil Ltda	00003003-040	SABAO LIQUIDO OMO PROTECAO FRASCO 3L`;
 
   const handlePreFill = () => {
     if (importType === 'EstoqueDiario') {
@@ -403,19 +405,19 @@ export default function ImportView({
       const updatedProductsList = [...products];
 
       if (importType === 'EstoqueDiario') {
-        // Daily Stock Rules: Code, Description, Box, Emb1, Emb9, average cost, SemVenda
+        // Daily Stock Rules: Código, Descrição Mercadoria, Complemento, Valor Disponível, Estoque, Dias sem venda E Idade.
         const iCodigo = getColIndex(['codigo', 'cod', 'ean', 'produto', 'sku'], 0);
-        const iDescricao = getColIndex(['descricao', 'descricaomercadoria', 'mercadoria', 'desc', 'descricaomercadorias'], 1);
-        const iEmbalagem = getColIndex(['embalagem', 'emb', 'embalagens'], 2);
-        const iEstoqueEmb1 = getColIndex(['estoqueemb1', 'emb1', 'caixa', 'fardo', 'caixas', 'fardos', 'estoque1'], 3);
-        const iEstoqueEmb9 = getColIndex(['estoqueemb9', 'emb9', 'unidade', 'avulsa', 'unidades', 'estoque9'], 4);
-        const iCustoMedio = getColIndex(['customedio', 'custo', 'preco', 'custounitario'], 5);
-        const iSemVenda = getColIndex(['semvenda', 'diassemvenda', 'diassemvendas', 'semvendas'], 6);
+        const iDescricao = getColIndex(['descricaomercadoria', 'descricao', 'mercadoria', 'desc', 'descricaomercadorias'], 1);
+        const iEmbalagem = getColIndex(['complemento', 'embalagem', 'emb', 'embalagens', 'compl'], 2);
+        const iValorDisponivel = getColIndex(['valordisponivel', 'valor', 'valorestoque', 'preco', 'customedio'], 3);
+        const iEstoque = getColIndex(['estoque', 'estoquetotal', 'caixa', 'emb1', 'unidade', 'emb9', 'saldo'], 4);
+        const iSemVenda = getColIndex(['diassemvenda', 'semvenda', 'diassemvendas', 'semvendas'], 5);
+        const iIdade = getColIndex(['idade', 'idadeestoque', 'diasestoque'], 6);
 
         if (hasHeaders) {
-          outputLog.push(`Cabeçalhos de Estoque identificados: Código (Col ${iCodigo+1}), Descrição (Col ${iDescricao+1}), Embalagem (Col ${iEmbalagem+1}), Estoque Emb1 (Col ${iEstoqueEmb1+1}), Estoque Emb9 (Col ${iEstoqueEmb9+1}), Custo Médio (Col ${iCustoMedio+1}), Sem Venda (Col ${iSemVenda+1}).`);
+          outputLog.push(`Cabeçalhos de Estoque identificados: Código (Col ${iCodigo+1}), Descrição (Col ${iDescricao+1}), Complemento (Col ${iEmbalagem+1}), Valor Disponível (Col ${iValorDisponivel+1}), Estoque (Col ${iEstoque+1}), Sem Venda (Col ${iSemVenda+1}), Idade (Col ${iIdade+1}).`);
         } else {
-          outputLog.push(`Nenhum cabeçalho explícito encontrado. Usando mapeamento de colunas padrão (1ª=Código, 2ª=Descrição, 3ª=Embalagem, 4ª=Emb1, 5ª=Emb9, 6ª=Custo, 7ª=SemVenda).`);
+          outputLog.push(`Nenhum cabeçalho explícito encontrado. Usando mapeamento de colunas padrão (1ª=Código, 2ª=Descrição, 3ª=Complemento, 4ª=Valor Disponível, 5ª=Estoque, 6ª=Sem Venda, 7ª=Idade).`);
         }
 
         rows.forEach((row, rowIndex) => {
@@ -424,26 +426,28 @@ export default function ImportView({
 
           const rawCodigo = cols[iCodigo];
           if (!rawCodigo) return;
-          const codigo = rawCodigo.replace(/^0+/, '') || '0';
+          const codigo = normalizeProductCode(rawCodigo);
           const descricao = cols[iDescricao] || 'Sem descrição';
           const embalagem = cols[iEmbalagem] || 'UN';
-          const estoqueEmb1 = Math.max(0, parseInt(cols[iEstoqueEmb1]) || 0);
-          const estoqueEmb9 = Math.max(0, parseInt(cols[iEstoqueEmb9]) || 0);
+          const estoque = Math.max(0, parseInt(cols[iEstoque]) || 0);
           
           // Cleaner cost parser that supports multi-formats
-          const rawCusto = cols[iCustoMedio] || '0';
-          const custoMedio = Math.max(0, parseFloat(rawCusto.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.')) || 0);
+          const rawValor = cols[iValorDisponivel] || '0';
+          const valorDisponivel = Math.max(0, parseFloat(rawValor.replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.')) || 0);
+          const custoMedio = estoque > 0 ? (valorDisponivel / estoque) : 0;
           const semVenda = Math.max(0, parseInt(cols[iSemVenda]) || 0);
+          const idade = Math.max(0, parseInt(cols[iIdade]) || 0);
 
           const existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo);
           if (existingIndex !== -1) {
             // Update stock and cost rules
             const updated = {
               ...updatedProductsList[existingIndex],
-              estoqueEmb1,
-              estoqueEmb9,
+              estoque,
+              valorDisponivel,
               custoMedio,
-              semVenda
+              semVenda,
+              idade
             };
             // Preserve description if user didn't overwrite it
             if (cols[iDescricao]) updated.descricao = descricao;
@@ -467,10 +471,11 @@ export default function ImportView({
               embalagem,
               cnpjIndustria: guessedCnpj,
               nomeIndustria: nomeInd,
-              estoqueEmb1,
-              estoqueEmb9,
+              estoque,
+              valorDisponivel,
               custoMedio,
-              semVenda
+              semVenda,
+              idade
             };
             updatedProductsList.push(newProduct);
             insertedCount++;
@@ -484,13 +489,13 @@ export default function ImportView({
         }
 
       } else {
-        // Base Principal: Code, Description, Box, CNPJ (Fornecedor), Industry Name (Razão Social).
+        // Base Principal: Fornecedor, Razão Social, Código E Descrição.
         const fallbackMapping: MappingIndices = {
-          iCodigo: getColIndex(['codigo', 'cod', 'ean', 'produto', 'sku'], 0),
-          iDescricao: getColIndex(['descricao', 'descricaomercadoria', 'mercadoria', 'desc'], 1),
-          iEmbalagem: getColIndex(['embalagem', 'emb', 'embalagens'], 2),
-          iCnpj: getColIndex(['fornecedor', 'cnpj', 'cnpjdaindustria', 'cnpjindustria', 'cnpjfornecedor', 'cnpjdafabrica'], 3),
-          iNomeIndustria: getColIndex(['razaosocial', 'razao', 'nomedaindustria', 'nomeindustria', 'industria', 'fantasia', 'nomefornecedor', 'fornecedornome'], 4)
+          iCnpj: getColIndex(['fornecedor', 'cnpj', 'cnpjdaindustria', 'cnpjfornecedor'], 0),
+          iNomeIndustria: getColIndex(['razaosocial', 'razao', 'nomedaindustria', 'nomeindustria', 'industria'], 1),
+          iCodigo: getColIndex(['codigo', 'cod', 'ean', 'produto', 'sku'], 2),
+          iDescricao: getColIndex(['descricao', 'descricaomercadoria', 'mercadoria', 'desc'], 3),
+          iEmbalagem: getColIndex(['embalagem', 'emb', 'embalagens', 'complemento'], 4)
         };
 
         // Parse rows to let the column sensor analyze cell data structures
@@ -509,7 +514,6 @@ export default function ImportView({
         outputLog.push(`=> Razão Social (Nome Indústria) detectado na Coluna ${iNomeIndustria + 1}`);
         outputLog.push(`=> Código detectado na Coluna ${iCodigo + 1}`);
         outputLog.push(`=> Descrição detectada na Coluna ${iDescricao + 1}`);
-        outputLog.push(`=> Embalagem detectada na Coluna ${iEmbalagem + 1}`);
 
         rows.forEach((row, rowIndex) => {
           const cols = row.split(/[\t,|;]/).map(c => c.trim().replace(/^"(.*)"$/, '$1'));
@@ -517,10 +521,10 @@ export default function ImportView({
 
           const rawCodigo = cols[iCodigo];
           if (!rawCodigo) return;
-          const codigo = rawCodigo.replace(/^0+/, '') || '0';
+          const codigo = normalizeProductCode(rawCodigo);
           const descricao = cols[iDescricao] || '';
           const embalagem = cols[iEmbalagem] || 'UN';
-          const cnpj = cols[iCnpj] || '';
+          const cnpj = formatCnpj(cols[iCnpj] || '');
           const nomeIndustria = cols[iNomeIndustria] || 'Indústria Não Informada';
 
           const existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo);
@@ -532,7 +536,7 @@ export default function ImportView({
               cnpjIndustria: cnpj || existing.cnpjIndustria,
               nomeIndustria: nomeIndustria !== 'Indústria Não Informada' ? nomeIndustria : existing.nomeIndustria,
               descricao: descricao || existing.descricao,
-              embalagem: embalagem || existing.embalagem
+              embalagem: embalagem !== 'UN' ? embalagem : existing.embalagem
             };
             updatedCount++;
             outputLog.push(`Código [${codigo}] atualizado: Vinculado à indústria CNPJ ${cnpj} (${nomeIndustria}).`);
@@ -544,10 +548,11 @@ export default function ImportView({
               embalagem,
               cnpjIndustria: cnpj,
               nomeIndustria,
-              estoqueEmb1: 0, // initially 0 stock
-              estoqueEmb9: 0,
+              estoque: 0,
+              valorDisponivel: 0,
               custoMedio: 0,
-              semVenda: 0
+              semVenda: 0,
+              idade: 0
             };
             updatedProductsList.push(newProduct);
             insertedCount++;

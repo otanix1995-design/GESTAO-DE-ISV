@@ -25,6 +25,7 @@ import {
   getSavedData, 
   saveData, 
   calculateSystemStats,
+  normalizeProductCode,
   INITIAL_PRODUCTS,
   INITIAL_SUPPLIERS,
   INITIAL_PROMOTERS,
@@ -50,7 +51,13 @@ export default function App() {
   const initialData = useMemo(() => getSavedData(), []);
 
   // Application States
-  const [products, setProducts] = useState<Product[]>(initialData.products || []);
+  const [products, setProducts] = useState<Product[]>(() => {
+    const rawProds = initialData.products || [];
+    return rawProds.map(p => ({
+      ...p,
+      codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
+    }));
+  });
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialData.suppliers || []);
   const [promoters, setPromoters] = useState<Promoter[]>(initialData.promoters || []);
   const [agencies, setAgencies] = useState<Agency[]>(initialData.agencies || []);
@@ -85,7 +92,13 @@ export default function App() {
           return;
         }
 
-        if (Array.isArray(s.products)) setProducts(s.products);
+        if (Array.isArray(s.products)) {
+          const cleaned = s.products.map((p: any) => ({
+            ...p,
+            codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
+          }));
+          setProducts(cleaned);
+        }
         if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
         if (Array.isArray(s.promoters)) setPromoters(s.promoters);
         if (Array.isArray(s.agencies)) setAgencies(s.agencies);
@@ -96,8 +109,12 @@ export default function App() {
         // If the Firestore document does not exist yet, seed it with local/initial data
         console.log("Firestore state empty. Seeding with local or initial mock data.");
         const localDefaults = getSavedData();
+        const cleanedDefaultsProducts = (localDefaults.products || []).map((p: any) => ({
+          ...p,
+          codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
+        }));
         setDoc(docRef, {
-          products: localDefaults.products || [],
+          products: cleanedDefaultsProducts,
           suppliers: localDefaults.suppliers || [],
           promoters: localDefaults.promoters || [],
           agencies: localDefaults.agencies || [],
