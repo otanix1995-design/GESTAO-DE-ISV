@@ -284,15 +284,19 @@ export function computeProductDerived(product: Product, suppliers: Supplier[]): 
   // 3. Classificações Base
   let status: 'Normal' | 'Abastecer' | 'Atenção' | 'Ruptura' = 'Ruptura';
   if (estoqueTotal > 0) {
-    status = 'Normal';
+    if (product && typeof product.semVenda === 'number' && product.semVenda >= 6) {
+      status = 'Abastecer';
+    } else {
+      status = 'Normal';
+    }
   } else {
     status = 'Ruptura';
   }
 
   // 4. Regra de Ajuste vs Prioridade
-  // Se Valor Estoque < R$ 200,00  => POSSÍVEL AJUSTE
-  const isPossivelAjuste = valorEstoque < 200;
-  const isPrioridadeOperacional = valorEstoque >= 200;
+  // Se Valor Estoque < R$ 200,00  => POSSÍVEL AJUSTE (exceto se for Abastecer)
+  const isPossivelAjuste = valorEstoque < 200 && status !== 'Abastecer';
+  const isPrioridadeOperacional = !isPossivelAjuste;
   const classificacao = isPossivelAjuste ? 'Possível Ajuste' : status;
 
   return {

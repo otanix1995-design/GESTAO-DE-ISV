@@ -596,38 +596,38 @@ export default function RelatoriosView({
 
       {/* --- FORMAL PREVIEW SHEETS EMBEDDED PREVIEW AREA --- */}
       {/* This area renders a gorgeous professional letter-styled container mimicking standard A4 paper boundaries */}
-      <div className="bg-white border text-left rounded-3xl p-8 shadow-xs border-gray-100 space-y-6 printable-document relative overflow-hidden" id="report-print-pane">
+      <div className="bg-white border text-left rounded-3xl p-8 print:p-2 shadow-xs border-gray-100 space-y-6 print:space-y-2 printable-document relative overflow-hidden" id="report-print-pane">
         
         {/* Printable Watermarked Indicator */}
-        <div className="absolute top-5 right-5 text-gray-200 select-none hidden md:block">
+        <div className="absolute top-5 right-5 text-gray-200 select-none hidden md:block print:hidden">
           <FileText className="w-24 h-24 rotate-12 opacity-30" />
         </div>
 
         {/* Corporate Header Block */}
-        <div className="border-b-2 border-gray-800 pb-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-[#F58220] text-white font-black text-2xl px-4 py-1.5 rounded-lg shadow-sm font-display tracking-tight">
+        <div className="border-b-2 border-gray-800 pb-5 print:pb-1 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:gap-1">
+          <div className="flex items-center gap-3 print:gap-2">
+            <div className="bg-[#F58220] text-white font-black text-2xl print:text-base px-4 print:px-2 py-1.5 print:py-0.5 rounded-lg shadow-sm font-display tracking-tight">
               A
             </div>
             <div>
-              <h1 className="text-lg font-black text-gray-900 tracking-wider font-display">ATACADÃO S.A</h1>
-              <div className="text-[11px] text-gray-500 font-mono font-bold uppercase">FILIAL 172 - CASCAVEL (PARANÁ)</div>
+              <h1 className="text-lg print:text-sm font-black text-gray-900 tracking-wider font-display">ATACADÃO S.A</h1>
+              <div className="text-[11px] print:text-[8px] text-gray-500 font-mono font-bold uppercase">FILIAL 172 - CASCAVEL (PARANÁ)</div>
             </div>
           </div>
 
-          <div className="text-right text-[10px] font-mono text-gray-400 space-y-0.5">
+          <div className="text-right text-[10px] print:text-[8px] font-mono text-gray-400 space-y-0.5 print:space-y-0">
             <div>EMISSÃO: <strong className="font-sans text-gray-650 font-black">{new Date().toLocaleString('pt-BR')}</strong></div>
             <div>GERADO POR: <strong className="font-sans text-gray-650 font-black">{currentUser.name}</strong></div>
             <div>STATUS FILIAL: <strong className="font-sans text-emerald-600 font-black">LOJA CONECTADA</strong></div>
-            <div className="text-[9px] text-[#F58220] font-sans font-bold uppercase tracking-wider">Documento Operacional Oficial</div>
+            <div className="text-[9px] print:text-[7px] text-[#F58220] font-sans font-bold uppercase tracking-wider">Documento Operacional Oficial</div>
           </div>
         </div>
 
         {/* Meta logs of Applied Filters */}
-        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-wrap justify-between gap-4 text-xs">
-          <div className="space-y-1">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block font-sans">Documento Solicitado</span>
-            <span className="font-extrabold text-sm text-gray-850 font-display">
+        <div className="bg-gray-50 p-4 print:p-2 print:my-0.5 rounded-xl border border-gray-200 flex flex-wrap justify-between gap-4 print:gap-2 text-xs print:text-[9px]">
+          <div className="space-y-1 print:space-y-0">
+            <span className="text-[9px] print:text-[7px] font-bold text-gray-400 uppercase tracking-widest block font-sans">Documento Solicitado</span>
+            <span className="font-extrabold text-sm print:text-xs text-gray-850 font-display">
               {activeReport === 'isv' ? 'Relatório Detalhado de ISV (Estoque e Inatividade)'
                : activeReport === 'promotor' ? 'Relatório por Promotor de Vendas' 
                : activeReport === 'industria' ? 'Relatório por Indústria Mapeada'
@@ -636,13 +636,13 @@ export default function RelatoriosView({
             </span>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-4 print:gap-3">
             <div className="text-right">
-              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">Data Base</span>
+              <span className="text-[9px] print:text-[7px] font-bold text-gray-400 uppercase tracking-widest block">Data Base</span>
               <span className="font-bold text-gray-700 font-mono">{selectedDate.split('-').reverse().join('/')}</span>
             </div>
-            <div className="text-right border-l pl-4">
-              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">Filtros Ativos</span>
+            <div className="text-right border-l pl-4 print:pl-3">
+              <span className="text-[9px] print:text-[7px] font-bold text-gray-400 uppercase tracking-widest block">Filtros Ativos</span>
               <span className="font-bold text-gray-700 leading-none">
                 {activeReport === 'isv' ? 'Filtro ISV Completo'
                  : activeReport === 'promotor' ? `Promotor: ${reportPromoter}`
@@ -655,14 +655,10 @@ export default function RelatoriosView({
         </div>
 
         {/* SUMMARY BLOCKS */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs print:hidden">
           <div className="bg-gray-50 rounded-lg p-3 border">
             <div className="text-gray-400 text-[10px] font-bold uppercase">Volume Total</div>
             <div className="text-lg font-black font-mono mt-0.5 text-gray-800">{reportSummary.totalItems} Itens</div>
-          </div>
-          <div className="bg-red-50 text-red-900 rounded-lg p-3 border border-red-100">
-            <div className="text-red-500 text-[10px] font-bold uppercase">Rupturas de Fardo</div>
-            <div className="text-lg font-black font-mono mt-0.5">{reportSummary.ruptures} Zerados</div>
           </div>
           <div className="bg-orange-50 text-orange-950 rounded-lg p-3 border border-orange-100">
             <div className="text-orange-600 text-[10px] font-bold uppercase">Gôndola (Abastecer)</div>
@@ -878,16 +874,14 @@ export default function RelatoriosView({
           <div className="space-y-4">
             <div className="border-b max-w-[200px] mx-auto h-8"></div>
             <div>
-              <p className="font-bold uppercase text-gray-500">{currentUser.name}</p>
-              <p>Perfil: {currentUser.role} - Emissor</p>
+              <p className="font-bold uppercase text-gray-650">ASSINATURA LIDERANÇA</p>
             </div>
           </div>
 
           <div className="space-y-4">
             <div className="border-b max-w-[200px] mx-auto h-8"></div>
             <div>
-              <p className="font-bold uppercase text-gray-500">Atacadão Filial 172</p>
-              <p>Auditor de Ruptura / Estoque Cascavel</p>
+              <p className="font-bold uppercase text-gray-650">ASSINATURA PROMOTOR</p>
             </div>
           </div>
         </div>
