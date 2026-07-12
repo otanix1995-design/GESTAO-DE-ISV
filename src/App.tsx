@@ -10,7 +10,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from './lib/firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import Header from './components/Header';
 import Sidebar, { ActiveTab } from './components/Sidebar';
 import DashboardView from './components/DashboardView';
@@ -175,15 +175,15 @@ export default function App() {
         setHasLoadedFromServer(true);
       });
 
-    const docRef = doc(db, 'state', 'current');
+    const currentDocRef = doc(db, 'state', 'current');
+    const productsMetaDocRef = doc(db, 'state', 'products_metadata');
     
-    // Subscribe to real-time changes
-    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+    // Subscribe to non-products state
+    const unsubscribeCurrent = onSnapshot(currentDocRef, (snapshot) => {
       if (!isMounted) return;
       if (snapshot.exists()) {
         const s = snapshot.data();
         
-        // Skip updating local state if the snapshot contains pending writes from this client.
         if (snapshot.metadata.hasPendingWrites) {
           return;
         }
@@ -193,7 +193,6 @@ export default function App() {
         const serverTime = s.lastUpdateTime ? Date.parse(s.lastUpdateTime) : 0;
 
         if (serverTime > 0 && localTime >= serverTime) {
-          console.log("Local state is newer or equal to Firestore snapshot. Skipping snapshot write to local state.");
           return;
         }
 
@@ -204,23 +203,6 @@ export default function App() {
 
         const isReset = s.lastUpdateTime === '2026-06-04T07:30:00Z';
 
-        // Safety: If local client has products, but the Firestore snapshot has NO products (and it is not a reset),
-        // do not let the empty/corrupted snapshot overwrite our rich local data.
-        if (products.length > 0 && (!Array.isArray(s.products) || s.products.length === 0) && !isReset) {
-          console.log("Firestore snapshot is empty of products, but local has products. Skipping snapshot update.");
-          return;
-        }
-
-        if (Array.isArray(s.products) && (s.products.length > 0 || isReset)) {
-          const cleaned = s.products.map((p: any) => ({
-            ...p,
-            codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
-          }));
-          setProducts(prev => {
-            const isSame = JSON.stringify(prev) === JSON.stringify(cleaned);
-            return isSame ? prev : cleaned;
-          });
-        }
         if (Array.isArray(s.suppliers) && (s.suppliers.length > 0 || isReset)) {
           setSuppliers(prev => JSON.stringify(prev) === JSON.stringify(s.suppliers) ? prev : s.suppliers);
         }
@@ -241,12 +223,82 @@ export default function App() {
         }
       }
     }, (error) => {
-      console.error("Erro no listener em tempo real do Firestore:", error);
+      console.error("Erro no listener em tempo real de metadados operacionais:", error);
+    });
+
+    // Subscribe to products metadata state
+    const unsubscribeProducts = onSnapshot(productsMetaDocRef, (snapshot) => {
+      if (!isMounted) return;
+      if (snapshot.exists()) {
+        const s = snapshot.data();
+        
+        if (snapshot.metadata.hasPendingWrites) {
+          return;
+        }
+
+        const localTime = Date.parse(lastUpdateTimeRef.current || '2026-06-04T07:30:00Z');
+        const serverTime = s.lastUpdateTime ? Date.parse(s.lastUpdateTime) : 0;
+
+        if (serverTime > 0 && localTime >= serverTime) {
+          return;
+        }
+
+        if (Date.now() - lastLocalChangeTime.current < 5000) {
+          return;
+        }
+
+        const numChunks = s.numChunks || 0;
+        const isReset = s.lastUpdateTime === '2026-06-04T07:30:00Z';
+
+        if (numChunks > 0) {
+          const fetchAllChunks = async () => {
+            try {
+              const chunkPromises = [];
+              for (let i = 0; i < numChunks; i++) {
+                const chunkDocRef = doc(db, 'state', `products_chunk_${i}`);
+                chunkPromises.push(getDoc(chunkDocRef));
+              }
+              const chunkSnapshots = await Promise.all(chunkPromises);
+              let combinedProducts: Product[] = [];
+              chunkSnapshots.forEach(snap => {
+                if (snap.exists()) {
+                  const chunkData = snap.data();
+                  if (Array.isArray(chunkData.products)) {
+                    combinedProducts = combinedProducts.concat(chunkData.products);
+                  }
+                }
+              });
+
+              if (combinedProducts.length > 0) {
+                const cleaned = combinedProducts.map((p: any) => ({
+                  ...p,
+                  codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
+                }));
+                setProducts(prev => {
+                  const isSame = JSON.stringify(prev) === JSON.stringify(cleaned);
+                  return isSame ? prev : cleaned;
+                });
+              }
+            } catch (err) {
+              console.error("Erro ao carregar chunks de produtos do Firestore:", err);
+            }
+          };
+          fetchAllChunks();
+        } else if (isReset) {
+          setProducts([]);
+        }
+        if (s.lastUpdateTime) {
+          setLastUpdateTime(prev => prev === s.lastUpdateTime ? prev : s.lastUpdateTime);
+        }
+      }
+    }, (error) => {
+      console.error("Erro no listener em tempo real de catálogo de produtos:", error);
     });
 
     return () => {
       isMounted = false;
-      unsubscribe();
+      unsubscribeCurrent();
+      unsubscribeProducts();
     };
   }, []);
 
@@ -273,20 +325,6 @@ export default function App() {
     // Save to LocalStorage
     saveData(payload);
 
-    // Save to Firestore
-    const docRef = doc(db, 'state', 'current');
-    setDoc(docRef, {
-      products,
-      suppliers,
-      promoters,
-      agencies,
-      supHistory,
-      impHistory,
-      lastUpdateTime: currentTimestamp
-    }).catch(err => {
-      console.error("Erro ao sincronizar dados com o Firestore:", err);
-    });
-
     // Redundant backup to local Express backend
     fetch('/api/data', {
       method: 'POST',
@@ -294,8 +332,93 @@ export default function App() {
       body: JSON.stringify(payload)
     }).catch(err => console.error("Erro ao sincronizar com servidor backup:", err));
 
-    // Update local state without triggering re-runs since lastUpdateTime is not in the dependency array
-    setLastUpdateTime(currentTimestamp);
+    // Helper to run Firestore operations with exponential backoff and jitter
+    const setDocWithRetry = async (docRef: any, data: any, maxRetries = 5, initialDelay = 500) => {
+      let attempt = 0;
+      while (attempt < maxRetries) {
+        try {
+          await setDoc(docRef, data);
+          return;
+        } catch (err: any) {
+          attempt++;
+          if (attempt >= maxRetries) {
+            throw err;
+          }
+          const delay = initialDelay * Math.pow(2, attempt) * (0.8 + Math.random() * 0.4);
+          console.warn(`[Firestore Retry] Tentativa falhou (${attempt}/${maxRetries}). Retentando em ${Math.round(delay)}ms. Erro:`, err);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    };
+
+    const syncWithFirestore = async () => {
+      try {
+        const currentDocRef = doc(db, 'state', 'current');
+        const productsMetaDocRef = doc(db, 'state', 'products_metadata');
+
+        // Robust Conflict Verification: Read before write to ensure no concurrent overwrite
+        try {
+          const docSnap = await getDoc(currentDocRef);
+          if (docSnap.exists()) {
+            const remoteData = docSnap.data();
+            const remoteTimestamp = remoteData.lastUpdateTime || '2026-06-04T07:30:00Z';
+            const remoteTimeMs = Date.parse(remoteTimestamp);
+            const localKnownTimeMs = Date.parse(lastUpdateTimeRef.current || '2026-06-04T07:30:00Z');
+
+            if (remoteTimeMs > localKnownTimeMs) {
+              console.warn(`[Firestore Sync] Conflito detectado: servidor possui modificações mais recentes (${remoteTimestamp}) do que o conhecido localmente (${lastUpdateTimeRef.current}). Abortando escrita.`);
+              return;
+            }
+          }
+        } catch (conflictErr) {
+          console.warn("[Firestore Sync] Não foi possível verificar conflito de timestamp, procedendo mesmo assim:", conflictErr);
+        }
+
+        // Chunking: Break products list into chunks of 300 to stay safely below 1MB Firestore document limits
+        const chunkSize = 300;
+        const chunks: Product[][] = [];
+        for (let i = 0; i < products.length; i += chunkSize) {
+          chunks.push(products.slice(i, i + chunkSize));
+        }
+
+        // Upload all product chunks in parallel with individual exponential retry
+        const chunkPromises = chunks.map((chunk, index) => {
+          const chunkDocRef = doc(db, 'state', `products_chunk_${index}`);
+          return setDocWithRetry(chunkDocRef, {
+            products: chunk,
+            lastUpdateTime: currentTimestamp
+          });
+        });
+
+        await Promise.all(chunkPromises);
+
+        // Upload metadata regarding product chunks
+        await setDocWithRetry(productsMetaDocRef, {
+          numChunks: chunks.length,
+          lastUpdateTime: currentTimestamp
+        });
+
+        // Upload other operational collections (exclude products to prevent exceeding document size limits)
+        await setDocWithRetry(currentDocRef, {
+          suppliers,
+          promoters,
+          agencies,
+          supHistory,
+          impHistory,
+          lastUpdateTime: currentTimestamp
+        });
+
+        console.log(`[Firestore Sync] Sincronização robusta efetuada com sucesso: ${chunks.length} chunks de produtos e metadados operacionais gravados.`);
+        
+        setLastUpdateTime(currentTimestamp);
+        lastUpdateTimeRef.current = currentTimestamp;
+
+      } catch (err) {
+        console.error("[Firestore Sync] Erro crítico persistente na sincronização robusta com o Firestore:", err);
+      }
+    };
+
+    syncWithFirestore();
 
   }, [products, suppliers, promoters, agencies, supHistory, impHistory, hasLoadedFromServer, isResetting]);
 
@@ -330,10 +453,16 @@ export default function App() {
         lastUpdateTime: '2026-06-04T07:30:00Z'
       };
 
-      // Reset on Firestore
+      // Reset products metadata to 0 chunks
+      const productsMetaDocRef = doc(db, 'state', 'products_metadata');
+      await setDoc(productsMetaDocRef, {
+        numChunks: 0,
+        lastUpdateTime: '2026-06-04T07:30:00Z'
+      });
+
+      // Reset operational data in Firestore
       const docRef = doc(db, 'state', 'current');
       await setDoc(docRef, {
-        products: INITIAL_PRODUCTS,
         suppliers: INITIAL_SUPPLIERS,
         promoters: INITIAL_PROMOTERS,
         agencies: INITIAL_AGENCIES,
