@@ -257,18 +257,23 @@ export interface ProductDerived {
   nomeIndustria: string;
 }
 
-export function computeProductDerived(product: Product, suppliers: Supplier[]): ProductDerived {
+export function computeProductDerived(product: Product, suppliers: Supplier[], suppliersMap?: Map<string, Supplier>): ProductDerived {
   // Safe string conversion and regex replace
   const productCnpjClean = product && product.cnpjIndustria 
     ? String(product.cnpjIndustria).replace(/[^\d]/g, '') 
     : '';
 
   // 1. Vincular fornecedor através do CNPJ da Indústria
-  const matchedSupplier = Array.isArray(suppliers) ? suppliers.find((s) => {
-    if (!s || !s.cnpjIndustria) return false;
-    const supplierCnpjClean = String(s.cnpjIndustria).replace(/[^\d]/g, '');
-    return supplierCnpjClean !== '' && productCnpjClean !== '' && supplierCnpjClean === productCnpjClean;
-  }) : undefined;
+  let matchedSupplier: Supplier | undefined = undefined;
+  if (suppliersMap) {
+    matchedSupplier = suppliersMap.get(productCnpjClean);
+  } else if (Array.isArray(suppliers)) {
+    matchedSupplier = suppliers.find((s) => {
+      if (!s || !s.cnpjIndustria) return false;
+      const supplierCnpjClean = String(s.cnpjIndustria).replace(/[^\d]/g, '');
+      return supplierCnpjClean !== '' && productCnpjClean !== '' && supplierCnpjClean === productCnpjClean;
+    });
+  }
 
   const promotor = matchedSupplier ? (matchedSupplier.promotor || 'Sem Cadastro') : 'Sem Cadastro';
   const agencia = matchedSupplier ? (matchedSupplier.agencia || 'Sem Cadastro') : 'Sem Cadastro';
@@ -322,7 +327,18 @@ export function calculateSystemStats(products: Product[], suppliers: Supplier[],
   const safePromoters = Array.isArray(promoters) ? promoters : [];
   const safeAgencies = Array.isArray(agencies) ? agencies : [];
 
-  const derived = safeProducts.map(p => computeProductDerived(p, safeSuppliers));
+  // Pre-build a cleaned CNPJ Map of suppliers for maximum performance
+  const suppliersMap = new Map<string, Supplier>();
+  safeSuppliers.forEach(s => {
+    if (s && s.cnpjIndustria) {
+      const clean = String(s.cnpjIndustria).replace(/[^\d]/g, '');
+      if (clean) {
+        suppliersMap.set(clean, s);
+      }
+    }
+  });
+
+  const derived = safeProducts.map(p => computeProductDerived(p, safeSuppliers, suppliersMap));
 
   const totalProdutos = safeProducts.length;
   const totalFornecedores = safeSuppliers.length;

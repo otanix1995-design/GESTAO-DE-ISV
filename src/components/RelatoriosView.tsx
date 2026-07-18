@@ -86,7 +86,16 @@ export default function RelatoriosView({
 
   // Pre-calculate derived products
   const productsDerived = useMemo(() => {
-    return products.map(p => computeProductDerived(p, suppliers));
+    const suppliersMap = new Map<string, Supplier>();
+    suppliers.forEach(s => {
+      if (s && s.cnpjIndustria) {
+        const clean = String(s.cnpjIndustria).replace(/[^\d]/g, '');
+        if (clean) {
+          suppliersMap.set(clean, s);
+        }
+      }
+    });
+    return products.map(p => computeProductDerived(p, suppliers, suppliersMap));
   }, [products, suppliers]);
 
   // Distinct listings for dropdown select options

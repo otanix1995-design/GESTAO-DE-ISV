@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Supplier, Promoter, Agency, User, SystemStats } from '../types';
 import { computeProductDerived, calculateSystemStats } from '../mockData';
 import { 
@@ -50,10 +50,25 @@ export default function DashboardView({ products, suppliers, promoters, agencies
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [modalSearch, setModalSearch] = useState('');
   const [copiedText, setCopiedText] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(100);
+
+  // Automatically reset visible limit when card or search query changes to keep DOM rendering instant
+  useEffect(() => {
+    setVisibleCount(100);
+  }, [selectedCard, modalSearch]);
 
   // Compute derived products
   const productsDerived = useMemo(() => {
-    return products.map(p => computeProductDerived(p, suppliers));
+    const suppliersMap = new Map<string, Supplier>();
+    suppliers.forEach(s => {
+      if (s && s.cnpjIndustria) {
+        const clean = String(s.cnpjIndustria).replace(/[^\d]/g, '');
+        if (clean) {
+          suppliersMap.set(clean, s);
+        }
+      }
+    });
+    return products.map(p => computeProductDerived(p, suppliers, suppliersMap));
   }, [products, suppliers]);
 
   // Pre-calculated sector totals for the filter pill badges
@@ -971,35 +986,49 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                          p.nomeIndustria.toLowerCase().includes(s);
                 });
 
-                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-450">Nenhum produto correspondente.</div>;
+                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-455">Nenhum produto correspondente.</div>;
+
+                const slicedList = list.slice(0, visibleCount);
 
                 return (
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
-                        <th className="pb-3 pr-2">Código</th>
-                        <th className="pb-3 pr-4">Descrição</th>
-                        <th className="pb-3 pr-2">Embalagem</th>
-                        <th className="pb-3 pr-4">Indústria/Fornecedor</th>
-                        <th className="pb-3 pr-2 text-right">Estoque</th>
-                        {!isPromotor && <th className="pb-3 pr-2 text-right">Custo Médio</th>}
-                        {!isPromotor && <th className="pb-3 text-right">Val. Estoque</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-xs">
-                      {list.map(p => (
-                        <tr key={p.product?.codigo} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                          <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
-                          <td className="py-3 pr-2 text-gray-500">{p.product?.embalagem}</td>
-                          <td className="py-3 pr-4 text-gray-600 font-medium truncate max-w-[180px]">{p.nomeIndustria}</td>
-                          <td className="py-3 pr-2 text-right font-semibold text-gray-900">{p.estoqueTotal}</td>
-                          {!isPromotor && <td className="py-3 pr-2 text-right text-gray-600 font-mono">R$ {p.product?.custoMedio?.toFixed(2)}</td>}
-                          {!isPromotor && <td className="py-3 text-right text-orange-600 font-mono font-semibold">R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>}
+                  <div className="space-y-4">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
+                          <th className="pb-3 pr-2">Código</th>
+                          <th className="pb-3 pr-4">Descrição</th>
+                          <th className="pb-3 pr-2">Embalagem</th>
+                          <th className="pb-3 pr-4">Indústria/Fornecedor</th>
+                          <th className="pb-3 pr-2 text-right">Estoque</th>
+                          {!isPromotor && <th className="pb-3 pr-2 text-right">Custo Médio</th>}
+                          {!isPromotor && <th className="pb-3 text-right">Val. Estoque</th>}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 text-xs">
+                        {slicedList.map(p => (
+                          <tr key={p.product?.codigo} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
+                            <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
+                            <td className="py-3 pr-2 text-gray-500">{p.product?.embalagem}</td>
+                            <td className="py-3 pr-4 text-gray-600 font-medium truncate max-w-[180px]">{p.nomeIndustria}</td>
+                            <td className="py-3 pr-2 text-right font-semibold text-gray-900">{p.estoqueTotal}</td>
+                            {!isPromotor && <td className="py-3 pr-2 text-right text-gray-600 font-mono">R$ {p.product?.custoMedio?.toFixed(2)}</td>}
+                            {!isPromotor && <td className="py-3 text-right text-orange-600 font-mono font-semibold">R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {list.length > visibleCount && (
+                      <div className="flex justify-center pt-4">
+                        <button
+                          onClick={() => setVisibleCount(prev => prev + 200)}
+                          className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-gray-200 transition-all cursor-pointer font-sans"
+                        >
+                          Carregar mais 200 itens (Exibindo {visibleCount} de {list.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })()}
 
@@ -1087,31 +1116,45 @@ export default function DashboardView({ products, suppliers, promoters, agencies
 
                 if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-455">Nenhuma ruptura crítica identificada no setor/filtro ativo.</div>;
 
+                const slicedList = list.slice(0, visibleCount);
+
                 return (
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
-                        <th className="pb-3 pr-2">Código</th>
-                        <th className="pb-3 pr-4">Descrição do Produto</th>
-                        <th className="pb-3 pr-4">Indústria / Fabricante</th>
-                        <th className="pb-3 pr-2 text-right">Dias Sem Venda</th>
-                        <th className="pb-3 text-right text-red-500">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-xs">
-                      {list.map(p => (
-                        <tr key={p.product?.codigo} className="hover:bg-red-50/10 transition-colors">
-                          <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                          <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
-                          <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
-                          <td className="py-3 pr-2 text-right font-mono text-gray-700 font-bold">{p.product?.semVenda} dias</td>
-                          <td className="py-3 text-right">
-                            <span className="bg-red-50 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-extrabold uppercase">Ruptura F172</span>
-                          </td>
+                  <div className="space-y-4">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
+                          <th className="pb-3 pr-2">Código</th>
+                          <th className="pb-3 pr-4">Descrição do Produto</th>
+                          <th className="pb-3 pr-4">Indústria / Fabricante</th>
+                          <th className="pb-3 pr-2 text-right">Dias Sem Venda</th>
+                          <th className="pb-3 text-right text-red-500">Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 text-xs">
+                        {slicedList.map(p => (
+                          <tr key={p.product?.codigo} className="hover:bg-red-50/10 transition-colors">
+                            <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
+                            <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
+                            <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
+                            <td className="py-3 pr-2 text-right font-mono text-gray-700 font-bold">{p.product?.semVenda} dias</td>
+                            <td className="py-3 text-right">
+                              <span className="bg-red-50 text-red-600 text-[10px] px-2 py-0.5 rounded-full font-extrabold uppercase">Ruptura F172</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {list.length > visibleCount && (
+                      <div className="flex justify-center pt-4">
+                        <button
+                          onClick={() => setVisibleCount(prev => prev + 200)}
+                          className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-gray-200 transition-all cursor-pointer font-sans"
+                        >
+                          Carregar mais 200 itens (Exibindo {visibleCount} de {list.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })()}
 
@@ -1124,33 +1167,47 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                          p.nomeIndustria.toLowerCase().includes(s);
                 });
 
-                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-450">Nenhum item em atenção fracionada no filtro ativo.</div>;
+                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-455">Nenhum item em atenção fracionada no filtro ativo.</div>;
+
+                const slicedList = list.slice(0, visibleCount);
 
                 return (
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
-                        <th className="pb-3 pr-2">Código</th>
-                        <th className="pb-3 pr-4">Descrição do Produto</th>
-                        <th className="pb-3 pr-4">Indústria / Fabricante</th>
-                        <th className="pb-3 pr-2 text-right">Estoque</th>
-                        <th className="pb-3 text-right text-amber-500">Alerta</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-xs">
-                      {list.map(p => (
-                        <tr key={p.product?.codigo} className="hover:bg-amber-50/10 transition-colors">
-                          <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                          <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
-                          <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
-                          <td className="py-3 pr-2 text-right font-bold text-gray-800">{p.estoqueTotal}</td>
-                          <td className="py-3 text-right">
-                            <span className="bg-amber-50 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold">Apenas Fracionado</span>
-                          </td>
+                  <div className="space-y-4">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
+                          <th className="pb-3 pr-2">Código</th>
+                          <th className="pb-3 pr-4">Descrição do Produto</th>
+                          <th className="pb-3 pr-4">Indústria / Fabricante</th>
+                          <th className="pb-3 pr-2 text-right">Estoque</th>
+                          <th className="pb-3 text-right text-amber-500">Alerta</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 text-xs">
+                        {slicedList.map(p => (
+                          <tr key={p.product?.codigo} className="hover:bg-amber-50/10 transition-colors">
+                            <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
+                            <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
+                            <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
+                            <td className="py-3 pr-2 text-right font-bold text-gray-800">{p.estoqueTotal}</td>
+                            <td className="py-3 text-right">
+                              <span className="bg-amber-50 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold">Apenas Fracionado</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {list.length > visibleCount && (
+                      <div className="flex justify-center pt-4">
+                        <button
+                          onClick={() => setVisibleCount(prev => prev + 200)}
+                          className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-gray-200 transition-all cursor-pointer font-sans"
+                        >
+                          Carregar mais 200 itens (Exibindo {visibleCount} de {list.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })()}
 
@@ -1163,35 +1220,49 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                          p.nomeIndustria.toLowerCase().includes(s);
                 });
 
-                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-450">Nenhum item pendente de abastecimento físico no filtro ativo.</div>;
+                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-455">Nenhum item pendente de abastecimento físico no filtro ativo.</div>;
+
+                const slicedList = list.slice(0, visibleCount);
 
                 return (
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
-                        <th className="pb-3 pr-2">Código</th>
-                        <th className="pb-3 pr-4">Descrição do Produto</th>
-                        <th className="pb-3 pr-4">Indústria / Fabricante</th>
-                        <th className="pb-3 pr-2 text-right">Estoque Total</th>
-                        <th className="pb-3 pr-2 text-right">Idade Sem Venda</th>
-                        <th className="pb-3 text-right text-orange-500 font-bold">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-xs">
-                      {list.map(p => (
-                        <tr key={p.product?.codigo} className="hover:bg-orange-50/10 transition-colors">
-                          <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                          <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
-                          <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
-                          <td className="py-3 pr-2 text-right font-mono font-bold text-gray-800">{p.estoqueTotal}</td>
-                          <td className="py-3 pr-2 text-right text-gray-500">{p.product?.semVenda} dias</td>
-                          <td className="py-3 text-right">
-                            <span className="bg-orange-50 text-orange-600 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase">Abastecer Gôndola</span>
-                          </td>
+                  <div className="space-y-4">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
+                          <th className="pb-3 pr-2">Código</th>
+                          <th className="pb-3 pr-4">Descrição do Produto</th>
+                          <th className="pb-3 pr-4">Indústria / Fabricante</th>
+                          <th className="pb-3 pr-2 text-right">Estoque Total</th>
+                          <th className="pb-3 pr-2 text-right">Idade Sem Venda</th>
+                          <th className="pb-3 text-right text-orange-500 font-bold">Ação</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 text-xs">
+                        {slicedList.map(p => (
+                          <tr key={p.product?.codigo} className="hover:bg-orange-50/10 transition-colors">
+                            <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
+                            <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
+                            <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
+                            <td className="py-3 pr-2 text-right font-mono font-bold text-gray-800">{p.estoqueTotal}</td>
+                            <td className="py-3 pr-2 text-right text-gray-500">{p.product?.semVenda} dias</td>
+                            <td className="py-3 text-right">
+                              <span className="bg-orange-50 text-orange-600 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase">Abastecer Gôndola</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {list.length > visibleCount && (
+                      <div className="flex justify-center pt-4">
+                        <button
+                          onClick={() => setVisibleCount(prev => prev + 200)}
+                          className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-gray-200 transition-all cursor-pointer font-sans"
+                        >
+                          Carregar mais 200 itens (Exibindo {visibleCount} de {list.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })()}
 
@@ -1204,35 +1275,49 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                          p.nomeIndustria.toLowerCase().includes(s);
                 });
 
-                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-450">Nenhum possível ajuste no filtro ativo.</div>;
+                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-440">Nenhum possível ajuste no filtro ativo.</div>;
+
+                const slicedList = list.slice(0, visibleCount);
 
                 return (
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
-                        <th className="pb-3 pr-2">Código</th>
-                        <th className="pb-3 pr-4">Descrição do Produto</th>
-                        <th className="pb-3 pr-4">Indústria / Fabricante</th>
-                        <th className="pb-3 pr-2 text-right">Estoque</th>
-                        {!isPromotor && <th className="pb-3 text-right">Valor Financeiro</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-xs">
-                      {list.map(p => (
-                        <tr key={p.product?.codigo} className="hover:bg-indigo-50/10 transition-colors">
-                          <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                          <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
-                          <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
-                          <td className="py-3 pr-2 text-right font-mono text-gray-600">{p.estoqueTotal}</td>
-                          {!isPromotor && (
-                            <td className="py-3 text-right text-indigo-500 font-mono font-semibold">
-                              R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          )}
+                  <div className="space-y-4">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
+                          <th className="pb-3 pr-2">Código</th>
+                          <th className="pb-3 pr-4">Descrição do Produto</th>
+                          <th className="pb-3 pr-4">Indústria / Fabricante</th>
+                          <th className="pb-3 pr-2 text-right">Estoque</th>
+                          {!isPromotor && <th className="pb-3 text-right">Valor Financeiro</th>}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 text-xs">
+                        {slicedList.map(p => (
+                          <tr key={p.product?.codigo} className="hover:bg-indigo-50/10 transition-colors">
+                            <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
+                            <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
+                            <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
+                            <td className="py-3 pr-2 text-right font-mono text-gray-600">{p.estoqueTotal}</td>
+                            {!isPromotor && (
+                              <td className="py-3 text-right text-indigo-500 font-mono font-semibold">
+                                R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {list.length > visibleCount && (
+                      <div className="flex justify-center pt-4">
+                        <button
+                          onClick={() => setVisibleCount(prev => prev + 200)}
+                          className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-gray-200 transition-all cursor-pointer font-sans"
+                        >
+                          Carregar mais 200 itens (Exibindo {visibleCount} de {list.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })()}
 
@@ -1245,35 +1330,49 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                          p.nomeIndustria.toLowerCase().includes(s);
                 });
 
-                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-450">Nenhum item correspondente no filtro ativo.</div>;
+                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-445">Nenhum item correspondente no filtro ativo.</div>;
+
+                const slicedList = list.slice(0, visibleCount);
 
                 return (
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
-                        <th className="pb-3 pr-2 text-center">Rank</th>
-                        <th className="pb-3 pr-2">Código</th>
-                        <th className="pb-3 pr-4">Descrição</th>
-                        <th className="pb-3 pr-4">Indústria / Fabricante</th>
-                        <th className="pb-3 pr-2 text-right">Estoque</th>
-                        <th className="pb-3 pr-2 text-right">Custo Médio</th>
-                        <th className="pb-3 text-right">Val. de Giro</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-xs">
-                      {list.map((p, idx) => (
-                        <tr key={p.product?.codigo} className="hover:bg-gray-50 transition-colors">
-                          <td className="py-3 pr-2 text-center font-mono text-gray-400 font-bold">{idx + 1}</td>
-                          <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                          <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
-                          <td className="py-3 pr-4 text-gray-600 truncate max-w-[150px]">{p.nomeIndustria}</td>
-                          <td className="py-3 pr-2 text-right font-mono font-medium text-gray-800">{p.estoqueTotal}</td>
-                          <td className="py-3 pr-2 text-right font-mono text-gray-600 font-medium">R$ {p.product?.custoMedio?.toFixed(2)}</td>
-                          <td className="py-3 text-right text-emerald-600 font-mono font-extrabold">R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <div className="space-y-4">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
+                          <th className="pb-3 pr-2 text-center">Rank</th>
+                          <th className="pb-3 pr-2">Código</th>
+                          <th className="pb-3 pr-4">Descrição</th>
+                          <th className="pb-3 pr-4">Indústria / Fabricante</th>
+                          <th className="pb-3 pr-2 text-right">Estoque</th>
+                          <th className="pb-3 pr-2 text-right">Custo Médio</th>
+                          <th className="pb-3 text-right">Val. de Giro</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 text-xs">
+                        {slicedList.map((p, idx) => (
+                          <tr key={p.product?.codigo} className="hover:bg-gray-50 transition-colors">
+                            <td className="py-3 pr-2 text-center font-mono text-gray-400 font-bold">{idx + 1}</td>
+                            <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
+                            <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
+                            <td className="py-3 pr-4 text-gray-600 truncate max-w-[150px]">{p.nomeIndustria}</td>
+                            <td className="py-3 pr-2 text-right font-mono font-medium text-gray-800">{p.estoqueTotal}</td>
+                            <td className="py-3 pr-2 text-right font-mono text-gray-600 font-medium">R$ {p.product?.custoMedio?.toFixed(2)}</td>
+                            <td className="py-3 text-right text-emerald-600 font-mono font-extrabold">R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {list.length > visibleCount && (
+                      <div className="flex justify-center pt-4">
+                        <button
+                          onClick={() => setVisibleCount(prev => prev + 200)}
+                          className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-gray-200 transition-all cursor-pointer font-sans"
+                        >
+                          Carregar mais 200 itens (Exibindo {visibleCount} de {list.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })()}
 

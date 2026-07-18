@@ -118,7 +118,16 @@ export default function BasePrincipalView({
 
   // Run derived computations once
   const derivedProducts = useMemo(() => {
-    return products.map(p => computeProductDerived(p, suppliers));
+    const suppliersMap = new Map<string, Supplier>();
+    suppliers.forEach(s => {
+      if (s && s.cnpjIndustria) {
+        const clean = String(s.cnpjIndustria).replace(/[^\d]/g, '');
+        if (clean) {
+          suppliersMap.set(clean, s);
+        }
+      }
+    });
+    return products.map(p => computeProductDerived(p, suppliers, suppliersMap));
   }, [products, suppliers]);
 
   // Combined Search and Filters
