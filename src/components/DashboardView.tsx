@@ -51,6 +51,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
   const [modalSearch, setModalSearch] = useState('');
   const [copiedText, setCopiedText] = useState(false);
   const [visibleCount, setVisibleCount] = useState(100);
+  const [abastecerMinDias, setAbastecerMinDias] = useState<number>(5);
 
   // Automatically reset visible limit when card or search query changes to keep DOM rendering instant
   useEffect(() => {
@@ -143,17 +144,25 @@ export default function DashboardView({ products, suppliers, promoters, agencies
 
   // List of products specifically for Abastecer Gôndola print-only PDF layout
   const printProducts = useMemo(() => {
-    let list = filteredProducts.filter(p => p.status === 'Abastecer' && !p.isPossivelAjuste);
-    if (selectedCard === 'abastecer' && modalSearch) {
-      const s = modalSearch.toLowerCase();
-      list = list.filter(p => {
+    let list = filteredProducts.filter(p => {
+      const est = p.product?.estoque ?? p.estoqueTotal ?? 0;
+      if (est <= 0) return false;
+      const sv = p.product?.semVenda ?? 0;
+      if (sv < abastecerMinDias) return false;
+      if (selectedCard === 'abastecer' && modalSearch) {
+        const s = modalSearch.toLowerCase();
         return (p.product?.codigo || '').toLowerCase().includes(s) ||
                (p.product?.descricao || '').toLowerCase().includes(s) ||
                p.nomeIndustria.toLowerCase().includes(s);
-      });
-    }
-    return list.sort((a, b) => b.valorEstoque - a.valorEstoque);
-  }, [filteredProducts, selectedCard, modalSearch]);
+      }
+      return true;
+    });
+    return list.sort((a, b) => {
+      const valA = typeof a.valorEstoque === 'number' && !isNaN(a.valorEstoque) ? a.valorEstoque : (a.product?.valorDisponivel || 0);
+      const valB = typeof b.valorEstoque === 'number' && !isNaN(b.valorEstoque) ? b.valorEstoque : (b.product?.valorDisponivel || 0);
+      return valB - valA;
+    });
+  }, [filteredProducts, selectedCard, modalSearch, abastecerMinDias]);
 
   const handleCopyTop20 = () => {
     let tsv = "Rank\tCódigo\tDescrição\tSetor\tEstoque\tCusto Médio\tValor Estoque\n";
@@ -1214,60 +1223,112 @@ export default function DashboardView({ products, suppliers, promoters, agencies
 
               {/* 6. ABASTECER */}
               {selectedCard === 'abastecer' && (() => {
-                const list = filteredProducts.filter(p => p.status === 'Abastecer' && !p.isPossivelAjuste).filter(p => {
+                const list = filteredProducts.filter(p => {
+                  const est = p.product?.estoque ?? p.estoqueTotal ?? 0;
+                  if (est <= 0) return false;
+                  const sv = p.product?.semVenda ?? 0;
+                  if (sv < abastecerMinDias) return false;
+
                   const s = modalSearch.toLowerCase();
+                  if (!s) return true;
                   return (p.product?.codigo || '').toLowerCase().includes(s) ||
                          (p.product?.descricao || '').toLowerCase().includes(s) ||
                          p.nomeIndustria.toLowerCase().includes(s);
-                }).sort((a, b) => b.valorEstoque - a.valorEstoque);
-
-                if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-455">Nenhum item pendente de abastecimento físico no filtro ativo.</div>;
+                }).sort((a, b) => {
+                  const valA = typeof a.valorEstoque === 'number' && !isNaN(a.valorEstoque) ? a.valorEstoque : Number(a.product?.valorDisponivel) || 0;
+                  const valB = typeof b.valorEstoque === 'number' && !isNaN(b.valorEstoque) ? b.valorEstoque : Number(b.product?.valorDisponivel) || 0;
+                  return valB - valA;
+                });
 
                 const slicedList = list.slice(0, visibleCount);
 
                 return (
                   <div className="space-y-4">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
-                          <th className="pb-3 pr-2">Código</th>
-                          <th className="pb-3 pr-4">Descrição do Produto</th>
-                          <th className="pb-3 pr-4">Indústria / Fabricante</th>
-                          <th className="pb-3 pr-2 text-right">Estoque Total</th>
-                          <th className="pb-3 pr-2 text-right">Dias Sem Venda</th>
-                          {!isPromotor && <th className="pb-3 pr-2 text-right text-orange-600 font-bold">Valor Disponível</th>}
-                          <th className="pb-3 text-right text-orange-500 font-bold">Ação</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50 text-xs">
-                        {slicedList.map(p => (
-                          <tr key={p.product?.codigo} className="hover:bg-orange-50/10 transition-colors">
-                            <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                            <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
-                            <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
-                            <td className="py-3 pr-2 text-right font-mono font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
-                            <td className="py-3 pr-2 text-right text-gray-500 font-mono font-medium">{p.product?.semVenda} dias</td>
-                            {!isPromotor && (
-                              <td className="py-3 pr-2 text-right font-mono font-bold text-orange-600">
-                                R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                            )}
-                            <td className="py-3 text-right">
-                              <span className="bg-orange-50 text-orange-600 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase">Abastecer Gôndola</span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {list.length > visibleCount && (
-                      <div className="flex justify-center pt-4">
-                        <button
-                          onClick={() => setVisibleCount(prev => prev + 200)}
-                          className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-gray-200 transition-all cursor-pointer font-sans"
-                        >
-                          Carregar mais 200 itens (Exibindo {visibleCount} de {list.length})
-                        </button>
+                    {/* Control & Filter Header Bar */}
+                    <div className="bg-orange-50/70 border border-orange-200/60 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-extrabold text-orange-950 uppercase tracking-wide text-[11px] font-sans">Filtro Dias Sem Venda:</span>
+                        <div className="flex items-center gap-1 bg-white border border-orange-200/80 rounded-xl p-1 shadow-2xs">
+                          {[5, 10, 15, 0].map((d) => (
+                            <button
+                              key={d}
+                              onClick={() => setAbastecerMinDias(d)}
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                abastecerMinDias === d
+                                  ? 'bg-[#F58220] text-white shadow-xs'
+                                  : 'text-gray-600 hover:bg-orange-50 hover:text-orange-900'
+                              }`}
+                            >
+                              {d === 0 ? 'Todos (≥0)' : `≥ ${d} dias`}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+
+                      <div className="flex items-center gap-2 text-orange-900 font-bold text-[11px] bg-white/90 px-3 py-1.5 rounded-xl border border-orange-200/60 shadow-2xs">
+                        <Sparkles className="w-3.5 h-3.5 text-[#F58220]" />
+                        <span>Ordenado por: <strong className="text-orange-950">Valor Disponível (Maior → Menor)</strong></span>
+                      </div>
+                    </div>
+
+                    {list.length === 0 ? (
+                      <div className="text-center py-12 text-xs text-gray-500 font-medium">
+                        Nenhum item encontrado para abastecimento físico com os filtros atuais (Dias Sem Venda ≥ {abastecerMinDias}).
+                      </div>
+                    ) : (
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
+                                <th className="pb-3 pr-2 text-center w-10">#</th>
+                                <th className="pb-3 pr-2">Código</th>
+                                <th className="pb-3 pr-4">Descrição do Produto</th>
+                                <th className="pb-3 pr-4">Indústria / Fabricante</th>
+                                <th className="pb-3 pr-2 text-right">Estoque Total</th>
+                                <th className="pb-3 pr-2 text-right">Dias Sem Venda</th>
+                                {!isPromotor && <th className="pb-3 pr-2 text-right text-orange-600 font-extrabold">Valor Disponível</th>}
+                                <th className="pb-3 text-right text-orange-500 font-bold">Ação</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50 text-xs">
+                              {slicedList.map((p, idx) => (
+                                <tr key={p.product?.codigo} className="hover:bg-orange-50/20 transition-colors">
+                                  <td className="py-3 pr-2 text-center font-mono text-gray-400 font-bold text-[11px]">{idx + 1}</td>
+                                  <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
+                                  <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
+                                  <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
+                                  <td className="py-3 pr-2 text-right font-mono font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
+                                  <td className="py-3 pr-2 text-right">
+                                    <span className="bg-orange-100/80 text-orange-900 text-[11px] font-mono font-bold px-2 py-0.5 rounded-md">
+                                      {p.product?.semVenda || 0} dias
+                                    </span>
+                                  </td>
+                                  {!isPromotor && (
+                                    <td className="py-3 pr-2 text-right font-mono font-black text-orange-600 text-[13px]">
+                                      R$ {(typeof p.valorEstoque === 'number' && !isNaN(p.valorEstoque) ? p.valorEstoque : Number(p.product?.valorDisponivel) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  )}
+                                  <td className="py-3 text-right">
+                                    <span className="bg-orange-50 text-orange-600 border border-orange-200/60 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase">Abastecer Gôndola</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {list.length > visibleCount && (
+                          <div className="flex justify-center pt-4">
+                            <button
+                              onClick={() => setVisibleCount(prev => prev + 200)}
+                              className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-xl border border-gray-200 transition-all cursor-pointer font-sans"
+                            >
+                              Carregar mais 200 itens (Exibindo {visibleCount} de {list.length})
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 );

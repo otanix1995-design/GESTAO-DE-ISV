@@ -283,13 +283,22 @@ export function computeProductDerived(product: Product, suppliers: Supplier[], s
   const nomeIndustria = product ? (product.nomeIndustria || 'Indústria Desconhecida') : 'Indústria Desconhecida';
 
   // 2. Fórmulas de estoque (with default null/undefined checks)
-  const estoqueTotal = product && typeof product.estoque === 'number' ? product.estoque : 0;
-  const valorEstoque = product && typeof product.valorDisponivel === 'number' ? product.valorDisponivel : 0;
+  const estoqueTotal = product && typeof product.estoque === 'number' && !isNaN(product.estoque)
+    ? product.estoque
+    : (product && product.estoque ? parseFloat(String(product.estoque)) || 0 : 0);
+
+  const valorEstoque = product && typeof product.valorDisponivel === 'number' && !isNaN(product.valorDisponivel)
+    ? product.valorDisponivel
+    : (product && product.valorDisponivel ? parseFloat(String(product.valorDisponivel)) || 0 : 0);
+
+  const semVendaNum = product && typeof product.semVenda === 'number' && !isNaN(product.semVenda)
+    ? product.semVenda
+    : (product && product.semVenda ? parseInt(String(product.semVenda)) || 0 : 0);
   
   // 3. Classificações Base
   let status: 'Normal' | 'Abastecer' | 'Atenção' | 'Ruptura' = 'Ruptura';
   if (estoqueTotal > 0) {
-    if (product && typeof product.semVenda === 'number' && product.semVenda >= 5) {
+    if (semVendaNum >= 5) {
       status = 'Abastecer';
     } else {
       status = 'Normal';
