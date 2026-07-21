@@ -163,7 +163,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
       if (desc.startsWith('RF.')) sector = 'FRIOS';
       else if (desc.startsWith('HF.')) sector = 'HORT FRUT';
       const custo = p.product?.custoMedio || 0;
-      tsv += `${idx + 1}\t${p.product?.codigo || ''}\t${desc}\t${sector}\t${p.estoqueTotal}\tR$ ${custo.toFixed(2)}\tR$ ${p.valorEstoque.toFixed(2)}\n`;
+      const estRep = p.product?.estoqueFormatado || p.estoqueTotal;
+      tsv += `${idx + 1}\t${p.product?.codigo || ''}\t${desc}\t${sector}\t${estRep}\tR$ ${custo.toFixed(2)}\tR$ ${p.valorEstoque.toFixed(2)}\n`;
     });
     
     navigator.clipboard.writeText(tsv)
@@ -1011,7 +1012,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                             <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
                             <td className="py-3 pr-2 text-gray-500">{p.product?.embalagem}</td>
                             <td className="py-3 pr-4 text-gray-600 font-medium truncate max-w-[180px]">{p.nomeIndustria}</td>
-                            <td className="py-3 pr-2 text-right font-semibold text-gray-900">{p.estoqueTotal}</td>
+                            <td className="py-3 pr-2 text-right font-semibold text-gray-900">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                             {!isPromotor && <td className="py-3 pr-2 text-right text-gray-600 font-mono">R$ {p.product?.custoMedio?.toFixed(2)}</td>}
                             {!isPromotor && <td className="py-3 text-right text-orange-600 font-mono font-semibold">R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>}
                           </tr>
@@ -1189,7 +1190,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                             <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
                             <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
                             <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
-                            <td className="py-3 pr-2 text-right font-bold text-gray-800">{p.estoqueTotal}</td>
+                            <td className="py-3 pr-2 text-right font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                             <td className="py-3 text-right">
                               <span className="bg-amber-50 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold">Apenas Fracionado</span>
                             </td>
@@ -1243,7 +1244,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                             <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
                             <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
                             <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
-                            <td className="py-3 pr-2 text-right font-mono font-bold text-gray-800">{p.estoqueTotal}</td>
+                            <td className="py-3 pr-2 text-right font-mono font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                             <td className="py-3 pr-2 text-right text-gray-500">{p.product?.semVenda} dias</td>
                             <td className="py-3 text-right">
                               <span className="bg-orange-50 text-orange-600 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase">Abastecer Gôndola</span>
@@ -1297,7 +1298,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                             <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
                             <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
                             <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
-                            <td className="py-3 pr-2 text-right font-mono text-gray-600">{p.estoqueTotal}</td>
+                            <td className="py-3 pr-2 text-right font-mono text-gray-600">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                             {!isPromotor && (
                               <td className="py-3 text-right text-indigo-500 font-mono font-semibold">
                                 R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1355,7 +1356,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                             <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
                             <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
                             <td className="py-3 pr-4 text-gray-600 truncate max-w-[150px]">{p.nomeIndustria}</td>
-                            <td className="py-3 pr-2 text-right font-mono font-medium text-gray-800">{p.estoqueTotal}</td>
+                            <td className="py-3 pr-2 text-right font-mono font-medium text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                             <td className="py-3 pr-2 text-right font-mono text-gray-600 font-medium">R$ {p.product?.custoMedio?.toFixed(2)}</td>
                             <td className="py-3 text-right text-emerald-600 font-mono font-extrabold">R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           </tr>
@@ -1434,7 +1435,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                                 </span>
                               </td>
                               <td className="py-3.5 pr-4 text-gray-600 truncate max-w-[150px]">{p.nomeIndustria}</td>
-                              <td className="py-3.5 pr-2 text-right font-mono font-semibold text-gray-800">{p.estoqueTotal}</td>
+                              <td className="py-3.5 pr-2 text-right font-mono font-semibold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                               {!isPromotor && <td className="py-3.5 pr-2 text-right font-mono text-gray-600 font-medium">R$ {p.product?.custoMedio?.toFixed(2)}</td>}
                               {!isPromotor && (
                                 <td className="py-3.5 text-right font-mono font-black text-blue-900">
@@ -1563,7 +1564,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                     <td className="p-3 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
                     <td className="p-3 font-semibold text-gray-900">{formatProductDesc(desc)}</td>
                     <td className="p-3 text-gray-600">{sectorLabel}</td>
-                    <td className="p-3 text-center font-bold text-gray-800">{p.estoqueTotal}</td>
+                    <td className="p-3 text-center font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                     <td className="p-3 text-center font-mono text-gray-500">{p.product?.semVenda} dias</td>
                     <td className="p-3 text-right text-[#F58220] font-mono font-semibold">
                       R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
