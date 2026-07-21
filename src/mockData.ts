@@ -289,7 +289,7 @@ export function computeProductDerived(product: Product, suppliers: Supplier[], s
   // 3. Classificações Base
   let status: 'Normal' | 'Abastecer' | 'Atenção' | 'Ruptura' = 'Ruptura';
   if (estoqueTotal > 0) {
-    if (product && typeof product.semVenda === 'number' && product.semVenda >= 6) {
+    if (product && typeof product.semVenda === 'number' && product.semVenda >= 5) {
       status = 'Abastecer';
     } else {
       status = 'Normal';

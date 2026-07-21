@@ -152,7 +152,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                p.nomeIndustria.toLowerCase().includes(s);
       });
     }
-    return list;
+    return list.sort((a, b) => b.valorEstoque - a.valorEstoque);
   }, [filteredProducts, selectedCard, modalSearch]);
 
   const handleCopyTop20 = () => {
@@ -1219,7 +1219,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                   return (p.product?.codigo || '').toLowerCase().includes(s) ||
                          (p.product?.descricao || '').toLowerCase().includes(s) ||
                          p.nomeIndustria.toLowerCase().includes(s);
-                });
+                }).sort((a, b) => b.valorEstoque - a.valorEstoque);
 
                 if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-455">Nenhum item pendente de abastecimento físico no filtro ativo.</div>;
 
@@ -1234,7 +1234,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                           <th className="pb-3 pr-4">Descrição do Produto</th>
                           <th className="pb-3 pr-4">Indústria / Fabricante</th>
                           <th className="pb-3 pr-2 text-right">Estoque Total</th>
-                          <th className="pb-3 pr-2 text-right">Idade Sem Venda</th>
+                          <th className="pb-3 pr-2 text-right">Dias Sem Venda</th>
+                          {!isPromotor && <th className="pb-3 pr-2 text-right text-orange-600 font-bold">Valor Disponível</th>}
                           <th className="pb-3 text-right text-orange-500 font-bold">Ação</th>
                         </tr>
                       </thead>
@@ -1245,7 +1246,12 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                             <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
                             <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
                             <td className="py-3 pr-2 text-right font-mono font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
-                            <td className="py-3 pr-2 text-right text-gray-500">{p.product?.semVenda} dias</td>
+                            <td className="py-3 pr-2 text-right text-gray-500 font-mono font-medium">{p.product?.semVenda} dias</td>
+                            {!isPromotor && (
+                              <td className="py-3 pr-2 text-right font-mono font-bold text-orange-600">
+                                R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            )}
                             <td className="py-3 text-right">
                               <span className="bg-orange-50 text-orange-600 text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase">Abastecer Gôndola</span>
                             </td>
