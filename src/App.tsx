@@ -146,118 +146,112 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
-    // Load initial state from local Express server backup (which has NO size limit and is 100% reliable)
-    fetch('/api/data')
-      .then(res => res.json())
-      .then(res => {
-        if (!isMounted) return;
-        
-        let s = null;
-        let sSource = 'localStorage';
-        const localTimestamp = initialData.lastUpdateTime || '2026-06-04T07:30:00Z';
-        const localTimeMs = Date.parse(localTimestamp);
-
-        if (res && res.data) {
-          const serverTimestamp = res.data.lastUpdateTime || '2026-06-04T07:30:00Z';
-          const serverTimeMs = Date.parse(serverTimestamp);
-
-          const localHasProducts = Array.isArray(initialData.products) && initialData.products.length > 0;
-          const serverHasProducts = Array.isArray(res.data.products) && res.data.products.length > 0;
-
-          const localCount = localHasProducts ? initialData.products.length : 0;
-          const serverCount = serverHasProducts ? res.data.products.length : 0;
-
-          // We adopt the server state if:
-          // 1. Server has equal or MORE products than local storage (e.g. server has imported spreadsheet data)
-          // 2. OR Server has equal or newer timestamp
-          // 3. OR local storage has no products
-          const isReset = res.data.lastUpdateTime === '2026-06-04T07:30:00Z';
-          if (serverHasProducts && (serverCount >= localCount || serverTimeMs >= localTimeMs || isReset)) {
-            s = res.data;
-            sSource = `server (${serverCount} produtos vs local ${localCount})`;
-          } else if (serverTimeMs > localTimeMs) {
-            s = res.data;
-            sSource = 'server (timestamp mais recente)';
-          } else {
-            s = initialData;
-            sSource = 'localStorage';
-          }
-        } else {
-          s = initialData;
-        }
-
-        console.log(`[Boot] Selected state source: ${sSource}`, s);
-
-        if (Array.isArray(s.products)) {
-          const cleaned = deduplicateProducts(s.products);
-          setProducts(cleaned);
-        }
-        if (Array.isArray(s.suppliers)) {
-          setSuppliers(s.suppliers);
-        }
-        if (Array.isArray(s.promoters)) {
-          setPromoters(s.promoters);
-        }
-        if (Array.isArray(s.agencies)) {
-          setAgencies(s.agencies);
-        }
-        if (Array.isArray(s.supHistory)) {
-          setSupHistory(s.supHistory);
-        }
-        if (Array.isArray(s.impHistory)) {
-          setImpHistory(s.impHistory);
-        }
-        if (s.lastUpdateTime) {
-          setLastUpdateTime(s.lastUpdateTime);
-          lastUpdateTimeRef.current = s.lastUpdateTime;
-        }
-        setHasLoadedFromServer(true);
-      })
-      .catch(err => {
-        console.error("Erro no carregamento primário do Express server:", err);
-        if (!isMounted) return;
-        
-        // LocalStorage fallback
-        const s = initialData;
-        if (Array.isArray(s.products)) {
-          const cleaned = deduplicateProducts(s.products);
-          setProducts(cleaned);
-        }
-        if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
-        if (Array.isArray(s.promoters)) setPromoters(s.promoters);
-        if (Array.isArray(s.agencies)) setAgencies(s.agencies);
-        if (Array.isArray(s.supHistory)) setSupHistory(s.supHistory);
-        if (Array.isArray(s.impHistory)) setImpHistory(s.impHistory);
-        if (s.lastUpdateTime) {
-          setLastUpdateTime(s.lastUpdateTime);
-          lastUpdateTimeRef.current = s.lastUpdateTime;
-        }
-        setHasLoadedFromServer(true);
-      });
-
     const currentDocRef = doc(db, 'state', 'current');
     const productsMetaDocRef = doc(db, 'state', 'products_metadata');
-    
-    // Subscribe to non-products state
+
+    // Boot: Load latest online state from Firestore first
+    const loadFromFirestoreOnBoot = async () => {
+      try {
+        const [currentSnap, metaSnap] = await Promise.all([
+          getDoc(currentDocRef),
+          getDoc(productsMetaDocRef)
+        ]);
+
+        let hasLoadedFirestoreData = false;
+
+        if (currentSnap.exists()) {
+          const s = currentSnap.data();
+          if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
+          if (Array.isArray(s.promoters)) setPromoters(s.promoters);
+          if (Array.isArray(s.agencies)) setAgencies(s.agencies);
+          if (Array.isArray(s.supHistory)) setSupHistory(s.supHistory);
+          if (Array.isArray(s.impHistory)) setImpHistory(s.impHistory);
+          if (s.lastUpdateTime) {
+            setLastUpdateTime(s.lastUpdateTime);
+            lastUpdateTimeRef.current = s.lastUpdateTime;
+          }
+          hasLoadedFirestoreData = true;
+        }
+
+        if (metaSnap.exists()) {
+          const meta = metaSnap.data();
+          const numChunks = meta.numChunks || 0;
+          if (numChunks > 0) {
+            const chunkPromises = [];
+            for (let i = 0; i < numChunks; i++) {
+              chunkPromises.push(getDoc(doc(db, 'state', `products_chunk_${i}`)));
+            }
+            const chunkSnaps = await Promise.all(chunkPromises);
+            let combinedProducts: Product[] = [];
+            chunkSnaps.forEach(snap => {
+              if (snap.exists() && Array.isArray(snap.data().products)) {
+                combinedProducts = combinedProducts.concat(snap.data().products);
+              }
+            });
+            if (combinedProducts.length > 0) {
+              setProducts(deduplicateProducts(combinedProducts));
+              hasLoadedFirestoreData = true;
+            }
+          }
+        }
+
+        // If Firestore had no data, fallback to local Express server or LocalStorage
+        if (!hasLoadedFirestoreData) {
+          const res = await fetch('/api/data');
+          if (res.ok) {
+            const resJson = await res.json();
+            const s = resJson?.data || initialData;
+            if (Array.isArray(s.products) && s.products.length > 0) setProducts(deduplicateProducts(s.products));
+            if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
+            if (Array.isArray(s.promoters)) setPromoters(s.promoters);
+            if (Array.isArray(s.agencies)) setAgencies(s.agencies);
+            if (Array.isArray(s.supHistory)) setSupHistory(s.supHistory);
+            if (Array.isArray(s.impHistory)) setImpHistory(s.impHistory);
+            if (s.lastUpdateTime) {
+              setLastUpdateTime(s.lastUpdateTime);
+              lastUpdateTimeRef.current = s.lastUpdateTime;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Erro ao carregar do Firestore no boot, usando backup local:", err);
+        try {
+          const res = await fetch('/api/data');
+          if (res.ok) {
+            const resJson = await res.json();
+            const s = resJson?.data || initialData;
+            if (Array.isArray(s.products) && s.products.length > 0) setProducts(deduplicateProducts(s.products));
+            if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
+            if (Array.isArray(s.promoters)) setPromoters(s.promoters);
+            if (Array.isArray(s.agencies)) setAgencies(s.agencies);
+            if (Array.isArray(s.supHistory)) setSupHistory(s.supHistory);
+            if (Array.isArray(s.impHistory)) setImpHistory(s.impHistory);
+            if (s.lastUpdateTime) {
+              setLastUpdateTime(s.lastUpdateTime);
+              lastUpdateTimeRef.current = s.lastUpdateTime;
+            }
+          }
+        } catch (_) {}
+      } finally {
+        if (isMounted) setHasLoadedFromServer(true);
+      }
+    };
+
+    loadFromFirestoreOnBoot();
+
+    // Subscribe to operational data Firestore changes
     const unsubscribeCurrent = onSnapshot(currentDocRef, (snapshot) => {
       if (!isMounted) return;
       if (snapshot.exists()) {
-        const s = snapshot.data();
-        
         if (snapshot.metadata.hasPendingWrites) {
-          return;
+          return; // Ignore optimistic local write in progress
         }
 
-        // Compare timestamps to prevent older Firestore snapshots from overwriting newer local state
+        const s = snapshot.data();
         const localTime = Date.parse(lastUpdateTimeRef.current || '2026-06-04T07:30:00Z');
         const serverTime = s.lastUpdateTime ? Date.parse(s.lastUpdateTime) : 0;
 
-        if (serverTime > 0 && localTime >= serverTime) {
-          return;
-        }
-
-        // Skip updating local state if a local change was made very recently
-        if (Date.now() - lastLocalChangeTime.current < 5000) {
+        if (serverTime > 0 && localTime > serverTime) {
           return;
         }
 
@@ -280,30 +274,26 @@ export default function App() {
         }
         if (s.lastUpdateTime) {
           setLastUpdateTime(prev => prev === s.lastUpdateTime ? prev : s.lastUpdateTime);
+          lastUpdateTimeRef.current = s.lastUpdateTime;
         }
       }
     }, (error) => {
       console.error("Erro no listener em tempo real de metadados operacionais:", error);
     });
 
-    // Subscribe to products metadata state
+    // Subscribe to products metadata Firestore changes
     const unsubscribeProducts = onSnapshot(productsMetaDocRef, (snapshot) => {
       if (!isMounted) return;
       if (snapshot.exists()) {
-        const s = snapshot.data();
-        
         if (snapshot.metadata.hasPendingWrites) {
           return;
         }
 
+        const s = snapshot.data();
         const localTime = Date.parse(lastUpdateTimeRef.current || '2026-06-04T07:30:00Z');
         const serverTime = s.lastUpdateTime ? Date.parse(s.lastUpdateTime) : 0;
 
-        if (serverTime > 0 && localTime >= serverTime) {
-          return;
-        }
-
-        if (Date.now() - lastLocalChangeTime.current < 5000) {
+        if (serverTime > 0 && localTime > serverTime) {
           return;
         }
 
@@ -346,6 +336,7 @@ export default function App() {
         }
         if (s.lastUpdateTime) {
           setLastUpdateTime(prev => prev === s.lastUpdateTime ? prev : s.lastUpdateTime);
+          lastUpdateTimeRef.current = s.lastUpdateTime;
         }
       }
     }, (error) => {
@@ -359,13 +350,11 @@ export default function App() {
     };
   }, []);
 
-  // 2. Automatically save local changes to both LocalStorage (offline) and Firestore (live multiplayer)
+  // 2. Automatically save local changes to LocalStorage (offline), local server, and Firestore (live multiplayer)
   useEffect(() => {
     if (!hasLoadedFromServer || isResetting) return;
 
-    // Track that a local change was just made
     lastLocalChangeTime.current = Date.now();
-
     const currentTimestamp = new Date().toISOString();
 
     const payload = {
@@ -382,7 +371,7 @@ export default function App() {
     // Save to LocalStorage
     saveData(payload);
 
-    // Redundant backup to local Express backend
+    // Save to local Express backend
     fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -409,27 +398,10 @@ export default function App() {
     };
 
     const syncWithFirestore = async () => {
+      setIsSyncing(true);
       try {
         const currentDocRef = doc(db, 'state', 'current');
         const productsMetaDocRef = doc(db, 'state', 'products_metadata');
-
-        // Robust Conflict Verification: Read before write to ensure no concurrent overwrite
-        try {
-          const docSnap = await getDoc(currentDocRef);
-          if (docSnap.exists()) {
-            const remoteData = docSnap.data();
-            const remoteTimestamp = remoteData.lastUpdateTime || '2026-06-04T07:30:00Z';
-            const remoteTimeMs = Date.parse(remoteTimestamp);
-            const localKnownTimeMs = Date.parse(lastUpdateTimeRef.current || '2026-06-04T07:30:00Z');
-
-            if (remoteTimeMs > localKnownTimeMs) {
-              console.warn(`[Firestore Sync] Conflito detectado: servidor possui modificações mais recentes (${remoteTimestamp}) do que o conhecido localmente (${lastUpdateTimeRef.current}). Abortando escrita.`);
-              return;
-            }
-          }
-        } catch (conflictErr) {
-          console.warn("[Firestore Sync] Não foi possível verificar conflito de timestamp, procedendo mesmo assim:", conflictErr);
-        }
 
         // Chunking: Break products list into chunks of 300 to stay safely below 1MB Firestore document limits
         const chunkSize = 300;
@@ -455,7 +427,7 @@ export default function App() {
           lastUpdateTime: currentTimestamp
         });
 
-        // Upload other operational collections (exclude products to prevent exceeding document size limits)
+        // Upload operational collections
         await setDocWithRetry(currentDocRef, {
           suppliers,
           promoters,
@@ -465,13 +437,15 @@ export default function App() {
           lastUpdateTime: currentTimestamp
         });
 
-        console.log(`[Firestore Sync] Sincronização robusta efetuada com sucesso: ${chunks.length} chunks de produtos e metadados operacionais gravados.`);
+        console.log(`[Firestore Sync] Sincronização efetuada com sucesso: ${chunks.length} chunks e metadados operacionais gravados.`);
         
         setLastUpdateTime(currentTimestamp);
         lastUpdateTimeRef.current = currentTimestamp;
 
       } catch (err) {
-        console.error("[Firestore Sync] Erro crítico persistente na sincronização robusta com o Firestore:", err);
+        console.error("[Firestore Sync] Erro na sincronização com o Firestore:", err);
+      } finally {
+        setIsSyncing(false);
       }
     };
 
