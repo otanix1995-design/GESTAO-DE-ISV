@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, SystemStats } from '../types';
-import { TEST_USERS } from '../mockData';
 import { 
   Store, 
   UserCheck, 
@@ -129,8 +128,9 @@ export default function Header({
     }
   };
 
-  const uniqueOnlineUsers = onlineUsers.length > 0 ? onlineUsers : [
-    { id: currentUser.id, name: currentUser.name, role: currentUser.role, email: currentUser.email, lastSeen: new Date().toISOString() }
+  const officialOnline = onlineUsers.filter(u => u.email === 'atacadaocascavel@atacadao.com' || u.name?.includes('Filial 172'));
+  const uniqueOnlineUsers = officialOnline.length > 0 ? officialOnline : [
+    { id: '1', name: 'Atacadão Filial 172 Cascavel', role: 'Admin', email: 'atacadaocascavel@atacadao.com', lastSeen: new Date().toISOString() }
   ];
 
   return (

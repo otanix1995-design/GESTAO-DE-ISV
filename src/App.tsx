@@ -118,9 +118,11 @@ export default function App() {
       const active: OnlineUserPresence[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as OnlineUserPresence;
-        // Consider active if updated within the last 3 minutes
+        // Consider active if updated within the last 3 minutes and official account
         if (data.lastSeen && (now - Date.parse(data.lastSeen)) < 180000) {
-          active.push(data);
+          if (data.email === 'atacadaocascavel@atacadao.com' || data.name?.includes('Filial 172')) {
+            active.push(data);
+          }
         }
       });
       setOnlineUsers(active);
