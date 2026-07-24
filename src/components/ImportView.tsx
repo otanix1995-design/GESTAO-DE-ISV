@@ -26,17 +26,24 @@ function splitRowColumns(row: string): string[] {
   if (!row) return [];
   const trimmedRow = row.trim();
   if (!trimmedRow) return [];
-  
+
   if (trimmedRow.includes('\t')) {
-    return trimmedRow.split('\t').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+    return trimmedRow.split('\t').map(c => c.trim().replace(/^"(.*)"$/, '$1').trim());
   }
-  if (trimmedRow.includes(';')) {
-    return trimmedRow.split(';').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+  
+  const delimiter = trimmedRow.includes(';') ? ';' : trimmedRow.includes('|') ? '|' : ',';
+  
+  // Quote-aware splitting for CSV / Semicolon files
+  const regex = new RegExp(`(?:^|${delimiter === ';' ? ';' : delimiter})(?:"([^"]*)"|([^"${delimiter === ';' ? ';' : delimiter}]*))`, 'g');
+  const cols: string[] = [];
+  let match;
+  while ((match = regex.exec(trimmedRow)) !== null) {
+    const val = match[1] !== undefined ? match[1] : match[2];
+    cols.push((val || '').trim());
   }
-  if (trimmedRow.includes('|')) {
-    return trimmedRow.split('|').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
-  }
-  return trimmedRow.split(',').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+
+  if (cols.length > 0) return cols;
+  return trimmedRow.split(delimiter).map(c => c.trim().replace(/^"(.*)"$/, '$1').trim());
 }
 
 interface MappingIndices {
@@ -47,11 +54,47 @@ interface MappingIndices {
   iNomeIndustria: number;
 }
 
+function findHeaderRow(lines: string[]): { headerRowIndex: number; rawHeaders: string[]; normalizedHeaders: string[] } {
+  const headerKeywords = [
+    'codigo', 'cod', 'ean', 'produto', 'sku', 'desc', 'descricao', 'descricaomercadoria', 
+    'embalagem', 'emb', 'complemento', 'fornecedor', 'razao', 'razaosocial', 'industria', 
+    'nomeindustria', 'cnpj', 'custo', 'customedio', 'semvenda', 'valordisponivel', 'estoque', 'idade'
+  ];
+
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const cols = splitRowColumns(lines[i]);
+    const normalized = cols.map(h => 
+      String(h || '')
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "")
+    );
+
+    const matches = normalized.filter(col => headerKeywords.some(kw => col.includes(kw)));
+    if (matches.length >= 2 || (lines.length === 1 && matches.length >= 1)) {
+      return {
+        headerRowIndex: i,
+        rawHeaders: cols,
+        normalizedHeaders: normalized
+      };
+    }
+  }
+
+  return {
+    headerRowIndex: -1,
+    rawHeaders: [],
+    normalizedHeaders: []
+  };
+}
+
 function detectBasePrincipalColumns(rows: string[][], fallbackIndices: MappingIndices): MappingIndices {
-  const numRowsToAnalyze = Math.min(rows.length, 10);
+  const numRowsToAnalyze = Math.min(rows.length, 15);
   if (numRowsToAnalyze === 0) return fallbackIndices;
 
-  const numCols = rows[0].length;
+  const numCols = Math.max(...rows.slice(0, numRowsToAnalyze).map(r => r.length));
+  if (numCols < 2) return fallbackIndices;
+
   const scoresByCol = Array.from({ length: numCols }, () => ({
     cnpj: 0,
     codigo: 0,
@@ -69,7 +112,7 @@ function detectBasePrincipalColumns(rows: string[][], fallbackIndices: MappingIn
       // 1. CNPJ Check (Fornecedor)
       const isFormatCnpj = /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(val);
       const cleanDigits = val.replace(/[^\d]/g, "");
-      const isCnpjDigits = cleanDigits.length === 14 || cleanDigits.length === 12;
+      const isCnpjDigits = cleanDigits.length === 14 || cleanDigits.length === 12 || cleanDigits.length === 13;
       
       if (isFormatCnpj) {
         scoresByCol[j].cnpj += 25;
@@ -82,26 +125,23 @@ function detectBasePrincipalColumns(rows: string[][], fallbackIndices: MappingIn
       // 2. Embalagem check
       const upperVal = val.toUpperCase();
       const isShort = val.length <= 18;
-      const isVeryShort = val.length <= 8;
       const hasEmbKeywords = /\b(CX|FD|FDO|UN|PCT|KG|GF|LT|PC|CXA|FD12|FD6|FD24|UNID|UNIDADES|CAIXA|FARDO|GARRAFA|LATA|COPO|PET)\b/i.test(val) || 
                             upperVal.startsWith("CX") || upperVal.startsWith("FD") || upperVal.startsWith("UN") || upperVal.startsWith("PCT") || upperVal.startsWith("PC");
-      const hasXMeasure = /\b\d+\s*[xX]\s*\d+\b/.test(val) || /^\d+\s*[xX]/i.test(val) || /^[0-9]+X/.test(upperVal);
+      const hasXMeasure = /\b\d+\s*[xX]\s*\d+\b/.test(val) || /^\d+\s*[xX]/i.test(val);
 
       if (hasEmbKeywords && isShort) {
         scoresByCol[j].embalagem += 15;
       } else if (hasXMeasure && isShort) {
         scoresByCol[j].embalagem += 10;
-      } else if (isVeryShort) {
-        scoresByCol[j].embalagem += 2;
       }
 
-      // 3. Código check (No spaces, short, numeric/alphanumeric)
+      // 3. Código check
       const noSpaces = !/\s/.test(val);
-      const isCodeLength = val.length >= 4 && val.length <= 15;
+      const isCodeLength = val.length >= 3 && val.length <= 15;
       const isNumeric = /^\d+$/.test(val);
       const isAlphanumericCode = /^[A-Za-z0-9-]+$/.test(val);
 
-      if (noSpaces && isCodeLength) {
+      if (noSpaces && isCodeLength && !isFormatCnpj) {
         if (isNumeric) {
           scoresByCol[j].codigo += 18;
         } else if (isAlphanumericCode) {
@@ -109,9 +149,9 @@ function detectBasePrincipalColumns(rows: string[][], fallbackIndices: MappingIn
         }
       }
 
-      // 4. Nome Indústria / Razão Social check (Ltda, S.A, S/A, Cooperativas, etc.)
+      // 4. Nome Indústria / Razão Social check
       const hasCompanyIndicators = /\b(S\.?A\.?|LTDA\.?|S\/A|M\.?E\.?|EIRELI|INDUSTRIA|COMERCIO|BRF|JBS|COCA[- ]COLA|MONDELEZ|NESTLE|DANONE|UNILEVER|AMBEV|BEBIDAS|DISTRIBUIDORA)\b/i.test(val);
-      const isMediumLength = val.length >= 8 && val.length <= 50;
+      const isMediumLength = val.length >= 5 && val.length <= 60;
       const hasSpaces = /\s/.test(val);
 
       if (hasCompanyIndicators) {
@@ -120,104 +160,61 @@ function detectBasePrincipalColumns(rows: string[][], fallbackIndices: MappingIn
         scoresByCol[j].nomeIndustria += 6;
       }
 
-      // 5. Descrição check (Product names like TAPETE, REFRIGERANTE, LIMPADOR, SABONETE...)
-      const hasProductKeywords = /\b(AGUA|PANO|TAPETE|SABAO|SHAMPOO|CONDICIONADOR|DESODORANTE|LEITE|CHOCOLATE|CEREAL|BOMBOM|CAFESOLUVEL|SUCO|REFRIGERANTE|BISCOITO|REFRESCO|MARGARINA|LASANHA|PRESUNTO|LINGUICA|STEAK|IOGURTE|SOBREMESA|ACTIVIA|MINERAL|PRATO|GAS|REGISTRO|SACOLA)\b/i.test(val);
+      // 5. Descrição check
+      const hasProductKeywords = /\b(AGUA|PANO|TAPETE|SABAO|SHAMPOO|CONDICIONADOR|DESODORANTE|LEITE|CHOCOLATE|CEREAL|BOMBOM|CAFESOLUVEL|SUCO|REFRIGERANTE|BISCOITO|REFRESCO|MARGARINA|LASANHA|PRESUNTO|LINGUICA|STEAK|IOGURTE|SOBREMESA|ACTIVIA|MINERAL|PRATO|GAS|REGISTRO|SACOLA|CERVEJA|HAMBURGUER|REFRIGERADO)\b/i.test(val);
       
       if (hasProductKeywords) {
         scoresByCol[j].descricao += 18;
-      } else if (hasSpaces && val.length > 12 && !hasCompanyIndicators) {
+      } else if (hasSpaces && val.length > 10 && !hasCompanyIndicators) {
         scoresByCol[j].descricao += 8;
       }
     }
   }
 
   const colRoles = new Map<string, number>();
+  const used = new Set<number>();
 
-  // Find the strongest assignment iteratively
-  // 1. Assign CNPJ
-  let bestCnpjCol = -1;
-  let maxCnpjScore = -1;
+  let bestCnpj = -1, maxCnpj = -1;
   for (let j = 0; j < numCols; j++) {
-    if (scoresByCol[j].cnpj > maxCnpjScore) {
-      maxCnpjScore = scoresByCol[j].cnpj;
-      bestCnpjCol = j;
-    }
+    if (scoresByCol[j].cnpj > maxCnpj) { maxCnpj = scoresByCol[j].cnpj; bestCnpj = j; }
   }
-  if (maxCnpjScore > 10) {
-    colRoles.set('cnpj', bestCnpjCol);
-  }
+  if (maxCnpj > 5) { colRoles.set('cnpj', bestCnpj); used.add(bestCnpj); }
 
-  // 2. Assign Código (must be distinct from CNPJ)
-  let bestCodCol = -1;
-  let maxCodScore = -1;
+  let bestCod = -1, maxCod = -1;
   for (let j = 0; j < numCols; j++) {
-    if (j === bestCnpjCol) continue;
-    if (scoresByCol[j].codigo > maxCodScore) {
-      maxCodScore = scoresByCol[j].codigo;
-      bestCodCol = j;
-    }
+    if (used.has(j)) continue;
+    if (scoresByCol[j].codigo > maxCod) { maxCod = scoresByCol[j].codigo; bestCod = j; }
   }
-  if (maxCodScore > 8) {
-    colRoles.set('codigo', bestCodCol);
-  }
+  if (maxCod > 5) { colRoles.set('codigo', bestCod); used.add(bestCod); }
 
-  // 3. Assign Embalagem
-  let bestEmbCol = -1;
-  let maxEmbScore = -1;
+  let bestEmb = -1, maxEmb = -1;
   for (let j = 0; j < numCols; j++) {
-    if (j === bestCnpjCol || j === bestCodCol) continue;
-    if (scoresByCol[j].embalagem > maxEmbScore) {
-      maxEmbScore = scoresByCol[j].embalagem;
-      bestEmbCol = j;
-    }
+    if (used.has(j)) continue;
+    if (scoresByCol[j].embalagem > maxEmb) { maxEmb = scoresByCol[j].embalagem; bestEmb = j; }
   }
-  if (maxEmbScore > 8) {
-    colRoles.set('embalagem', bestEmbCol);
-  }
+  if (maxEmb > 5) { colRoles.set('embalagem', bestEmb); used.add(bestEmb); }
 
-  // 4. Assign Nome Indústria / Razão Social
-  let bestIndCol = -1;
-  let maxIndScore = -1;
+  let bestInd = -1, maxInd = -1;
   for (let j = 0; j < numCols; j++) {
-    if (j === bestCnpjCol || j === bestCodCol || j === bestEmbCol) continue;
-    if (scoresByCol[j].nomeIndustria > maxIndScore) {
-      maxIndScore = scoresByCol[j].nomeIndustria;
-      bestIndCol = j;
-    }
+    if (used.has(j)) continue;
+    if (scoresByCol[j].nomeIndustria > maxInd) { maxInd = scoresByCol[j].nomeIndustria; bestInd = j; }
   }
-  if (maxIndScore > 4) {
-    colRoles.set('nomeIndustria', bestIndCol);
-  }
+  if (maxInd > 3) { colRoles.set('nomeIndustria', bestInd); used.add(bestInd); }
 
-  // 5. Assign Descrição
-  let bestDescCol = -1;
-  let maxDescScore = -1;
+  let bestDesc = -1, maxDesc = -1;
   for (let j = 0; j < numCols; j++) {
-    if (j === bestCnpjCol || j === bestCodCol || j === bestEmbCol || j === bestIndCol) continue;
-    if (scoresByCol[j].descricao > maxDescScore) {
-      maxDescScore = scoresByCol[j].descricao;
-      bestDescCol = j;
-    }
+    if (used.has(j)) continue;
+    if (scoresByCol[j].descricao > maxDesc) { maxDesc = scoresByCol[j].descricao; bestDesc = j; }
   }
-  if (maxDescScore > 4) {
-    colRoles.set('descricao', bestDescCol);
-  }
+  if (maxDesc > 3) { colRoles.set('descricao', bestDesc); used.add(bestDesc); }
 
-  const resolved = {
+  return {
     iCnpj: colRoles.has('cnpj') ? colRoles.get('cnpj')! : fallbackIndices.iCnpj,
     iNomeIndustria: colRoles.has('nomeIndustria') ? colRoles.get('nomeIndustria')! : fallbackIndices.iNomeIndustria,
     iCodigo: colRoles.has('codigo') ? colRoles.get('codigo')! : fallbackIndices.iCodigo,
     iDescricao: colRoles.has('descricao') ? colRoles.get('descricao')! : fallbackIndices.iDescricao,
-    iEmbalagem: colRoles.has('embalagem') ? colRoles.get('embalagem')! : fallbackIndices.iEmbalagem
+    iEmbalagem: colRoles.has('embalagem') ? colRoles.get('embalagem')! : -1
   };
-
-  const allIndices = [resolved.iCnpj, resolved.iNomeIndustria, resolved.iCodigo, resolved.iDescricao, resolved.iEmbalagem];
-  const uniqueIndices = new Set(allIndices);
-  if (uniqueIndices.size === 5) {
-    return resolved;
-  }
-
-  return fallbackIndices;
 }
 
 interface ImportViewProps {
@@ -258,38 +255,67 @@ export default function ImportView({
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+        
+        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('Nenhuma aba encontrada no arquivo de planilha.');
+        }
+
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         
-        // Get the worksheet as a 2D array of strings/numbers
-        const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+        // Convert sheet to 2D array
+        const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
         
         if (!json || json.length === 0) {
           setImportLog({
             status: 'error',
-            message: 'Não foi possível encontrar dados válidos na primeira aba do arquivo Excel.'
+            message: 'Não foi possível encontrar dados válidos na primeira aba da planilha Excel.'
           });
           return;
         }
         
-        // Convert the 2D array into a tab-separated text block to fill the text-area and reuse the existing parsing logic
+        // Convert the 2D array into a tab-separated text block
         const stringRows = json
-          .map(row => row.map(cell => {
+          .map(row => (Array.isArray(row) ? row : []).map(cell => {
             if (cell === null || cell === undefined) return '';
-            const str = String(cell).trim();
-            return str;
+            return String(cell).trim();
           }).join('\t'))
-          .filter(rowText => rowText.replace(/\t/g, '').trim().length > 0); // Skip empty rows
+          .filter(rowText => rowText.replace(/\t/g, '').trim().length > 0);
+
+        if (stringRows.length === 0) {
+          setImportLog({
+            status: 'error',
+            message: 'A planilha selecionada está vazia.'
+          });
+          return;
+        }
 
         const textData = stringRows.join('\n');
         setPasteData(textData);
-        setImportLog({
-          status: 'success',
-          message: `Planilha "${file.name}" carregada com sucesso! ${json.length} linhas importadas e coladas abaixo para revisão. Confira os dados mapeados e clique em "Importar e Sincronizar" no final.`
-        });
+
+        // Auto detect import type from content
+        const lowerData = textData.toLowerCase();
+        let targetType = importType;
+        
+        if (lowerData.includes('cnpj') || lowerData.includes('razao') || lowerData.includes('fornecedor') || lowerData.includes('razaosocial')) {
+          if (!lowerData.includes('dias sem venda') && !lowerData.includes('valordisponivel') && !lowerData.includes('valor disponivel')) {
+            targetType = 'BasePrincipal';
+            setImportType('BasePrincipal');
+          }
+        } else if (lowerData.includes('estoque') || lowerData.includes('valor disponivel') || lowerData.includes('sem venda')) {
+          targetType = 'EstoqueDiario';
+          setImportType('EstoqueDiario');
+        }
+
+        // Execute import directly!
+        executeImportData(textData, targetType, file.name);
+
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       } catch (error: any) {
-        console.error(error);
+        console.error('File upload error:', error);
         setImportLog({
           status: 'error',
           message: `Erro ao ler a planilha Excel: ${error.message || 'Formato de arquivo corrompido ou incompatível.'}`
@@ -318,12 +344,12 @@ export default function ImportView({
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       const ext = file.name.split('.').pop()?.toLowerCase();
-      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv' || ext === 'ods') {
         handleFileUpload(file);
       } else {
         setImportLog({
           status: 'error',
-          message: 'Tipo de arquivo inválido. Por favor, envie uma planilha do Excel (.xlsx, .xls) ou arquivo separado por vírgulas (.csv).'
+          message: 'Tipo de arquivo inválido. Por favor, envie uma planilha do Excel (.xlsx, .xls, .ods) ou arquivo CSV (.csv).'
         });
       }
     }
@@ -361,7 +387,11 @@ export default function ImportView({
     }
   };
 
-  const handleParseImport = () => {
+  const executeImportData = (
+    textToParse: string, 
+    activeImportType: 'EstoqueDiario' | 'BasePrincipal',
+    fileNameCustom?: string
+  ) => {
     if (!isAdmin) {
       setImportLog({
         status: 'error',
@@ -370,45 +400,32 @@ export default function ImportView({
       return;
     }
 
-    if (!pasteData.trim()) {
+    if (!textToParse.trim()) {
       setImportLog({
         status: 'error',
-        message: 'Área de transferência vazia. Por favor, cole os dados delimitados da planilha.'
+        message: 'Área de transferência vazia. Por favor, cole os dados delimitados da planilha ou selecione um arquivo.'
       });
       return;
     }
 
     try {
-      const lines = pasteData.trim().split('\n');
+      const lines = textToParse.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
       if (lines.length < 1) {
-        throw new Error('A planilha colada está vazia.');
+        throw new Error('A planilha está vazia.');
       }
 
-      // Check if first line contains headers or values
-      const firstRowCols = splitRowColumns(lines[0]);
-      const normalizedFirstRow = firstRowCols.map(h => 
-        h.toLowerCase()
-         .normalize("NFD")
-         .replace(/[\u0300-\u036f]/g, "")
-         .replace(/[^a-z0-9]/g, "")
-      );
+      // Find header row using keyword matching in first 10 lines
+      const { headerRowIndex, rawHeaders, normalizedHeaders } = findHeaderRow(lines);
+      const hasHeaders = headerRowIndex !== -1;
 
-      const hasHeaders = normalizedFirstRow.some(col => 
-        ['codigo', 'cod', 'desc', 'descricao', 'embalagem', 'emb', 'fornecedor', 'razao', 'razaosocial', 'industria', 'cnpj', 'custo', 'customedio', 'semvenda'].includes(col)
-      );
-
-      const rows = hasHeaders ? lines.slice(1) : lines;
-      const rawHeaders = hasHeaders ? firstRowCols : [];
-      const normalizedHeaders = hasHeaders ? normalizedFirstRow : [];
+      const rows = hasHeaders ? lines.slice(headerRowIndex + 1) : lines;
 
       const getColIndex = (aliases: string[], fallbackIndex: number): number => {
         if (!hasHeaders) return fallbackIndex;
-        // Try exact match first
         for (const alias of aliases) {
           const index = normalizedHeaders.indexOf(alias);
           if (index !== -1) return index;
         }
-        // Try substring match second
         for (const alias of aliases) {
           const index = normalizedHeaders.findIndex(h => h.includes(alias));
           if (index !== -1) return index;
@@ -418,68 +435,66 @@ export default function ImportView({
 
       const outputLog: string[] = [];
       let updatedCount = 0;
-      let ignoredCount = 0;
       let insertedCount = 0;
       
       const updatedProductsList = [...products];
 
-      if (importType === 'EstoqueDiario') {
-        // Daily Stock Rules: Código, Descrição Mercadoria, Complemento, Valor Disponível, Estoque, Dias sem venda E Idade.
-        const iCodigo = getColIndex(['codigo', 'cod', 'ean', 'produto', 'sku'], 0);
-        const iDescricao = getColIndex(['descricaomercadoria', 'descricao', 'mercadoria', 'desc', 'descricaomercadorias'], 1);
-        const iEmbalagem = getColIndex(['complemento', 'embalagem', 'emb', 'embalagens', 'compl'], 2);
-        const iValorDisponivel = getColIndex(['valordisponivel', 'valor', 'valorestoque', 'preco', 'customedio'], 3);
-        const iEstoque = getColIndex(['estoque', 'estoquetotal', 'caixa', 'emb1', 'unidade', 'emb9', 'saldo'], 4);
-        const iSemVenda = getColIndex(['diassemvenda', 'semvenda', 'diassemvendas', 'semvendas'], 5);
-        const iIdade = getColIndex(['idade', 'idadeestoque', 'diasestoque'], 6);
+      if (activeImportType === 'EstoqueDiario') {
+        const iCodigo = getColIndex(['codigo', 'cod', 'ean', 'produto', 'sku', 'codproduto', 'codigoitem'], 0);
+        const iDescricao = getColIndex(['descricaomercadoria', 'descricao', 'mercadoria', 'desc', 'descricaomercadorias', 'nomeproduto'], 1);
+        const iEmbalagem = getColIndex(['complemento', 'embalagem', 'emb', 'embalagens', 'compl', 'unidade', 'emb1'], 2);
+        const iValorDisponivel = getColIndex(['valordisponivel', 'valor', 'valorestoque', 'preco', 'customedio', 'valordisponvel', 'vlrdisponivel'], 3);
+        const iEstoque = getColIndex(['estoque', 'estoquetotal', 'caixa', 'emb1', 'unidade', 'emb9', 'saldo', 'qtd', 'quantidade'], 4);
+        const iSemVenda = getColIndex(['diassemvenda', 'semvenda', 'diassemvendas', 'semvendas', 'diassemv'], 5);
+        const iIdade = getColIndex(['idade', 'idadeestoque', 'diasestoque', 'idadeemdias'], 6);
 
         if (hasHeaders) {
-          outputLog.push(`Cabeçalhos de Estoque identificados: Código (Col ${iCodigo+1}), Descrição (Col ${iDescricao+1}), Complemento (Col ${iEmbalagem+1}), Valor Disponível (Col ${iValorDisponivel+1}), Estoque (Col ${iEstoque+1}), Sem Venda (Col ${iSemVenda+1}), Idade (Col ${iIdade+1}).`);
+          outputLog.push(`Cabeçalhos de Estoque identificados (Linha ${headerRowIndex+1}): Código (Col ${iCodigo+1}), Descrição (Col ${iDescricao+1}), Embalagem (Col ${iEmbalagem+1}), Valor Disponível (Col ${iValorDisponivel+1}), Estoque (Col ${iEstoque+1}), Sem Venda (Col ${iSemVenda+1}), Idade (Col ${iIdade+1}).`);
         } else {
-          outputLog.push(`Nenhum cabeçalho explícito encontrado. Usando mapeamento de colunas padrão (1ª=Código, 2ª=Descrição, 3ª=Complemento, 4ª=Valor Disponível, 5ª=Estoque, 6ª=Sem Venda, 7ª=Idade).`);
+          outputLog.push(`Nenhum cabeçalho explícito encontrado. Usando mapeamento de colunas padrão.`);
         }
 
-        rows.forEach((row, rowIndex) => {
+        rows.forEach((row) => {
           const cols = splitRowColumns(row);
-          if (cols.length < 1 || !cols[0]) return; // Skip empty rows
+          if (cols.length < 1) return;
 
           const rawCodigo = cols[iCodigo];
           if (!rawCodigo) return;
           const codigo = normalizeProductCode(rawCodigo);
-          const descricao = cols[iDescricao] || 'Sem descrição';
+          if (!codigo) return;
+
+          const descricao = (cols[iDescricao] && cols[iDescricao] !== 'Sem descrição') ? cols[iDescricao] : '';
           const embalagem = cols[iEmbalagem] || 'UN';
           const rawEstoque = cols[iEstoque] || '';
           const estoque = Math.max(0, parseEstoqueString(rawEstoque));
           
-          // Use robust BR/JS float parser to avoid removing dots from valid decimals
           const rawValor = cols[iValorDisponivel] || '0';
           const valorDisponivel = Math.max(0, parseBrazilianFloat(rawValor));
           const custoMedio = estoque > 0 ? (valorDisponivel / estoque) : 0;
-          const semVenda = Math.max(0, parseInt(cols[iSemVenda]) || 0);
-          const idade = Math.max(0, parseInt(cols[iIdade]) || 0);
+          const semVenda = Math.max(0, parseInt(cols[iSemVenda], 10) || 0);
+          const idade = Math.max(0, parseInt(cols[iIdade], 10) || 0);
 
           let existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo || normalizeProductCode(p.codigo) === codigo);
           
-          if (existingIndex === -1 && descricao && descricao !== 'Sem descrição') {
+          if (existingIndex === -1 && descricao) {
             const normDesc = descricao.trim().toLowerCase();
             existingIndex = updatedProductsList.findIndex(p => p.descricao && p.descricao.trim().toLowerCase() === normDesc);
           }
 
           if (existingIndex !== -1) {
-            // Update stock and cost rules while maintaining Base Principal industry association
             const existing = updatedProductsList[existingIndex];
             const updated: Product = {
               ...existing,
               codigo: normalizeProductCode(existing.codigo) || codigo,
               estoque,
-              estoqueFormatado: rawEstoque.trim(),
+              estoqueFormatado: rawEstoque.trim() || existing.estoqueFormatado,
               valorDisponivel,
               custoMedio,
               semVenda,
               idade
             };
-            if (cols[iDescricao] && descricao !== 'Sem descrição') updated.descricao = descricao;
-            if (cols[iEmbalagem] && embalagem !== 'UN') updated.embalagem = embalagem;
+            if (descricao) updated.descricao = descricao;
+            if (embalagem && embalagem !== 'UN') updated.embalagem = embalagem;
             updatedProductsList[existingIndex] = updated;
             updatedCount++;
           } else {
@@ -499,7 +514,7 @@ export default function ImportView({
 
             const newProduct: Product = {
               codigo,
-              descricao,
+              descricao: descricao || 'Produto sem descrição',
               embalagem,
               cnpjIndustria: guessedCnpj,
               nomeIndustria: nomeInd,
@@ -515,61 +530,67 @@ export default function ImportView({
           }
         });
 
-        outputLog.push(`Processamento concluído.`);
-        outputLog.push(`Sincronizados com sucesso: ${updatedCount} produtos cadastrados.`);
+        outputLog.push(`Processamento de Estoque Diário concluído.`);
+        outputLog.push(`Atualizados com sucesso: ${updatedCount} itens.`);
         if (insertedCount > 0) {
           outputLog.push(`Novos produtos catalogados no estoque: ${insertedCount} itens.`);
         }
 
       } else {
-        // Base Principal: Fornecedor, Razão Social, Código E Descrição.
+        // Base Principal: Fornecedor, Razão Social, Código, Descrição, Embalagem
         const fallbackMapping: MappingIndices = {
-          iCnpj: getColIndex(['fornecedor', 'cnpj', 'cnpjdaindustria', 'cnpjfornecedor'], 0),
-          iNomeIndustria: getColIndex(['razaosocial', 'razao', 'nomedaindustria', 'nomeindustria', 'industria'], 1),
-          iCodigo: getColIndex(['codigo', 'cod', 'ean', 'produto', 'sku'], 2),
-          iDescricao: getColIndex(['descricao', 'descricaomercadoria', 'mercadoria', 'desc'], 3),
-          iEmbalagem: getColIndex(['embalagem', 'emb', 'embalagens', 'complemento'], 4)
+          iCnpj: getColIndex(['fornecedor', 'cnpj', 'cnpjdaindustria', 'cnpjfornecedor', 'forn', 'cnpjind'], 0),
+          iNomeIndustria: getColIndex(['razaosocial', 'razao', 'nomedaindustria', 'nomeindustria', 'industria', 'empresa', 'fornecedornome'], 1),
+          iCodigo: getColIndex(['codigo', 'cod', 'ean', 'produto', 'sku', 'codproduto'], 2),
+          iDescricao: getColIndex(['descricao', 'descricaomercadoria', 'mercadoria', 'desc', 'nomeproduto'], 3),
+          iEmbalagem: getColIndex(['embalagem', 'emb', 'embalagens', 'complemento', 'compl'], 4)
         };
 
-        // Parse rows to let the column sensor analyze cell data structures
-        const parsedRows = rows.map(row => splitRowColumns(row)).filter(r => r.length > 0 && r[0]);
+        const parsedRows = rows.map(row => splitRowColumns(row)).filter(r => r.length > 0 && r.some(cell => cell.trim().length > 0));
 
-        // Run data-level column detection
-        const finalMapping = detectBasePrincipalColumns(parsedRows, fallbackMapping);
+        let finalMapping = fallbackMapping;
+        if (!hasHeaders) {
+          finalMapping = detectBasePrincipalColumns(parsedRows, fallbackMapping);
+        }
+
         const iCodigo = finalMapping.iCodigo;
         const iDescricao = finalMapping.iDescricao;
         const iEmbalagem = finalMapping.iEmbalagem;
         const iCnpj = finalMapping.iCnpj;
         const iNomeIndustria = finalMapping.iNomeIndustria;
 
-        outputLog.push(`[SENSOR INTELIGENTE DE COLUNAS] Analisando estrutura das células por padrões de dados...`);
-        outputLog.push(`=> CNPJ (Fornecedor) detectado na Coluna ${iCnpj + 1}`);
-        outputLog.push(`=> Razão Social (Nome Indústria) detectado na Coluna ${iNomeIndustria + 1}`);
-        outputLog.push(`=> Código detectado na Coluna ${iCodigo + 1}`);
-        outputLog.push(`=> Descrição detectada na Coluna ${iDescricao + 1}`);
+        outputLog.push(`=> Mapeamento de Colunas da Base Principal:`);
+        outputLog.push(`   Código: Coluna ${iCodigo >= 0 ? iCodigo + 1 : 'N/A'}`);
+        outputLog.push(`   Descrição: Coluna ${iDescricao >= 0 ? iDescricao + 1 : 'N/A'}`);
+        if (iEmbalagem >= 0) outputLog.push(`   Embalagem: Coluna ${iEmbalagem + 1}`);
+        outputLog.push(`   CNPJ: Coluna ${iCnpj >= 0 ? iCnpj + 1 : 'N/A'}`);
+        outputLog.push(`   Razão Social: Coluna ${iNomeIndustria >= 0 ? iNomeIndustria + 1 : 'N/A'}`);
 
         const updatedSuppliersList = [...suppliers];
         let newSuppliersCount = 0;
 
-        rows.forEach((row, rowIndex) => {
-          const cols = splitRowColumns(row);
-          if (cols.length < 1 || !cols[0]) return;
+        parsedRows.forEach((cols) => {
+          if (cols.length < 1) return;
 
-          const rawCodigo = cols[iCodigo];
+          const rawCodigo = iCodigo >= 0 ? cols[iCodigo] : '';
           if (!rawCodigo) return;
           const codigo = normalizeProductCode(rawCodigo);
-          const descricao = cols[iDescricao] || '';
-          const embalagem = cols[iEmbalagem] || 'UN';
-          const cnpj = formatCnpj(cols[iCnpj] || '');
-          const nomeIndustria = cols[iNomeIndustria] || 'Indústria Não Informada';
+          if (!codigo) return;
+
+          const descricao = (iDescricao >= 0 && cols[iDescricao]) ? cols[iDescricao] : '';
+          const embalagem = (iEmbalagem >= 0 && cols[iEmbalagem]) ? cols[iEmbalagem] : 'UN';
+          const rawCnpj = iCnpj >= 0 ? cols[iCnpj] : '';
+          const cnpj = formatCnpj(rawCnpj);
+          const nomeIndustria = (iNomeIndustria >= 0 && cols[iNomeIndustria]) ? cols[iNomeIndustria] : 'Indústria Não Informada';
 
           // Auto register supplier if CNPJ is valid and not yet in suppliers list
           if (cnpj && cnpj.length >= 14 && setSuppliers) {
-            const supplierExists = updatedSuppliersList.some(s => s.cnpjIndustria === cnpj);
+            const cleanCnpj = cnpj.replace(/[^\d]/g, '');
+            const supplierExists = updatedSuppliersList.some(s => s.cnpjIndustria && s.cnpjIndustria.replace(/[^\d]/g, '') === cleanCnpj);
             if (!supplierExists) {
               updatedSuppliersList.push({
                 cnpjIndustria: cnpj,
-                nomeIndustria: nomeIndustria !== 'Indústria Não Informada' ? nomeIndustria : `Indústria CNPJ ${cnpj}`,
+                nomeIndustria: (nomeIndustria && nomeIndustria !== 'Indústria Não Informada') ? nomeIndustria : `Indústria CNPJ ${cnpj}`,
                 promotor: 'Sem Cadastro',
                 agencia: 'Sem Cadastro',
                 diasAtendimento: []
@@ -585,7 +606,6 @@ export default function ImportView({
           }
 
           if (existingIndex !== -1) {
-            // Update mapping to help fix existing incorrect assignments in database
             const existing = updatedProductsList[existingIndex];
             updatedProductsList[existingIndex] = {
               ...existing,
@@ -596,9 +616,7 @@ export default function ImportView({
               embalagem: (embalagem && embalagem !== 'UN') ? embalagem : existing.embalagem
             };
             updatedCount++;
-            outputLog.push(`Código [${codigo}] atualizado: Vinculado à indústria CNPJ ${cnpj} (${nomeIndustria}).`);
           } else {
-            // Create brand new product
             const newProduct: Product = {
               codigo,
               descricao,
@@ -618,13 +636,13 @@ export default function ImportView({
 
         if (newSuppliersCount > 0 && setSuppliers) {
           setSuppliers(updatedSuppliersList);
-          outputLog.push(`Fornecedores Mapeados: ${newSuppliersCount} novas indústrias cadastradas automaticamente.`);
+          outputLog.push(`Fornecedores Mapeados: ${newSuppliersCount} novas indústrias cadastradas.`);
         }
 
         outputLog.push(`Cadastro Mestre Processado.`);
         outputLog.push(`Sucesso: ${insertedCount} novos produtos inseridos.`);
         if (updatedCount > 0) {
-          outputLog.push(`Atualizados: ${updatedCount} produtos existentes com novas amarrações de CNPJ / Razão Social.`);
+          outputLog.push(`Atualizados: ${updatedCount} produtos existentes com vínculos de CNPJ / Razão Social.`);
         }
       }
 
@@ -632,12 +650,14 @@ export default function ImportView({
       setProducts(deduplicateProducts(updatedProductsList));
 
       const timestamp = new Date().toISOString();
+      const fileNameUsed = fileNameCustom || (activeImportType === 'EstoqueDiario' ? 'estoque_venda_diaria.xlsx' : 'cadastro_mestre_produtos.xlsx');
+      
       const newImportHistoryEntry: ImportHistoryEntry = {
         id: 'imp' + Date.now(),
         timestamp,
         usuario: currentUser.name,
-        tipo: importType,
-        nomeArquivo: importType === 'EstoqueDiario' ? 'estoque_venda_diaria_manual.xlsx' : 'cadastro_mestre_produtos_manual.xlsx',
+        tipo: activeImportType,
+        nomeArquivo: fileNameUsed,
         totalLinhas: rows.length,
         sucesso: true
       };
@@ -647,21 +667,26 @@ export default function ImportView({
 
       setImportLog({
         status: 'success',
-        message: importType === 'EstoqueDiario' 
-          ? `Sucesso: Sincronização diária concluída! ${updatedCount} estoques atualizados.`
-          : `Sucesso: Cadastro mestre processado! ${insertedCount} novos códigos integrados e ${updatedCount} atualizados.`,
+        message: activeImportType === 'EstoqueDiario' 
+          ? `Sucesso: Sincronização diária concluída! ${updatedCount} estoques atualizados, ${insertedCount} novos.`
+          : `Sucesso: Cadastro mestre processado! ${insertedCount} novos produtos inseridos e ${updatedCount} atualizados.`,
         details: outputLog
       });
 
-      // Clear input
+      // Clear paste input
       setPasteData('');
 
     } catch (err: any) {
+      console.error('Import error:', err);
       setImportLog({
         status: 'error',
-        message: `Falha ao processar a importação: ${err.message || 'Formato incompreensível'}`
+        message: `Falha ao processar a importação: ${err.message || 'Formato de planilha incompreensível'}`
       });
     }
+  };
+
+  const handleParseImport = () => {
+    executeImportData(pasteData, importType);
   };
 
   const handleClearHistory = () => {
