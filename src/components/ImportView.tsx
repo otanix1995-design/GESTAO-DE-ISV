@@ -6,7 +6,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product, Supplier, User, ImportHistoryEntry } from '../types';
-import { formatCnpj, normalizeProductCode, deduplicateProducts, parseBrazilianFloat, parseEstoqueString } from '../mockData';
+import { formatCnpj, normalizeProductCode, deduplicateProducts, sanitizeProductIndustry, parseBrazilianFloat, parseEstoqueString } from '../mockData';
 import { 
   FileSpreadsheet, 
   UploadCloud, 
@@ -528,7 +528,7 @@ export default function ImportView({
 
           if (existingIndex !== undefined) {
             const existing = updatedProductsList[existingIndex];
-            const updated: Product = {
+            const updated: Product = sanitizeProductIndustry({
               ...existing,
               codigo: existing.codigo || codigo,
               estoque,
@@ -536,44 +536,63 @@ export default function ImportView({
               valorDisponivel,
               custoMedio,
               semVenda,
-              idade
-            };
-            if (descricao) updated.descricao = descricao;
-            if (embalagem && embalagem !== 'UN') updated.embalagem = embalagem;
+              idade,
+              descricao: (descricao && (!existing.descricao || existing.descricao === 'Sem descrição' || descricao.length > existing.descricao.length)) ? descricao : existing.descricao,
+              embalagem: (embalagem && embalagem !== 'UN') ? embalagem : existing.embalagem
+            });
             updatedProductsList[existingIndex] = updated;
             updatedCount++;
           } else {
             // New product in daily sheet not found in Base Principal
-            const guessedCnpj = codigo.startsWith('100') ? '02.916.265/0001-60' // JBS
-                              : codigo.startsWith('200') ? '03.016.124/0001-50' // Ambev
-                              : codigo.startsWith('300') ? '61.068.276/0001-04' // Unilever
-                              : '60.398.369/0001-85'; // Nestle
+            let foundCnpj = '';
+            let foundNomeInd = 'Indústria Não Cadastrada';
 
-            const cleanGuessed = guessedCnpj.replace(/[^\d]/g, '');
-            const matchedSupplier = suppliers.find(s => s.cnpjIndustria && s.cnpjIndustria.replace(/[^\d]/g, '') === cleanGuessed);
-            const nomeInd = matchedSupplier ? matchedSupplier.nomeIndustria : 
-              (cleanGuessed === '02916265000160' ? 'JBS S/A' :
-               cleanGuessed === '03016124000150' ? 'AMBEV S/A' :
-               cleanGuessed === '61068276000104' ? 'UNILEVER BRASIL' :
-               cleanGuessed === '60398369000185' ? 'NESTLÉ BRASIL' : 'Indústria Não Cadastrada');
+            // Check if description hints at a known brand
+            if (descricao) {
+              const descUpper = descricao.toUpperCase();
+              if (descUpper.includes('TOZZI')) {
+                foundCnpj = '04.476.996/0001-67';
+                foundNomeInd = 'TOZZI IND E COM DE ALIMENTOS LTDA';
+              } else if (descUpper.includes('CEPERA') || descUpper.includes('CPA') || descUpper.includes('MOLHO INGLES CEPERA')) {
+                foundCnpj = '43.208.624/0001-20';
+                foundNomeInd = 'CEPERA IND E COM DE ALIMENTOS';
+              } else if (descUpper.includes('YOKI')) {
+                foundCnpj = '61.156.501/0001-56';
+                foundNomeInd = 'YOKI / GENERAL MILLS';
+              } else if (descUpper.includes('SEARA') || descUpper.includes('FRIBOI')) {
+                foundCnpj = '02.916.265/0001-60';
+                foundNomeInd = 'JBS S/A';
+              } else if (descUpper.includes('SPATEN') || descUpper.includes('BRAHMA') || descUpper.includes('SKOL') || descUpper.includes('BUDWEISER')) {
+                foundCnpj = '03.016.124/0001-50';
+                foundNomeInd = 'AMBEV S/A';
+              } else {
+                const matchedSup = suppliers.find(s => s.nomeIndustria && s.nomeIndustria.length > 3 && descUpper.includes(s.nomeIndustria.split(' ')[0].toUpperCase()));
+                if (matchedSup) {
+                  foundCnpj = matchedSup.cnpjIndustria;
+                  foundNomeInd = matchedSup.nomeIndustria;
+                }
+              }
+            }
 
-            const newProduct: Product = {
+            const newProduct: Product = sanitizeProductIndustry({
               codigo,
               descricao: descricao || 'Produto sem descrição',
               embalagem,
-              cnpjIndustria: guessedCnpj,
-              nomeIndustria: nomeInd,
+              cnpjIndustria: foundCnpj,
+              nomeIndustria: foundNomeInd,
               estoque,
               estoqueFormatado: rawEstoque.trim(),
               valorDisponivel,
               custoMedio,
               semVenda,
               idade
-            };
+            });
 
             const newIdx = updatedProductsList.length;
             updatedProductsList.push(newProduct);
             codeToIndexMap.set(codigo, newIdx);
+            const norm = normalizeProductCode(codigo);
+            if (norm) codeToIndexMap.set(norm, newIdx);
             if (descricao) descToIndexMap.set(descricao.trim().toLowerCase(), newIdx);
             insertedCount++;
           }
@@ -653,17 +672,17 @@ export default function ImportView({
 
           if (existingIndex !== undefined) {
             const existing = updatedProductsList[existingIndex];
-            updatedProductsList[existingIndex] = {
+            updatedProductsList[existingIndex] = sanitizeProductIndustry({
               ...existing,
               codigo: codigo,
-              cnpjIndustria: cnpj || existing.cnpjIndustria,
-              nomeIndustria: (nomeIndustria && nomeIndustria !== 'Indústria Não Informada') ? nomeIndustria : existing.nomeIndustria,
-              descricao: descricao || existing.descricao,
+              cnpjIndustria: (cnpj && cnpj.length >= 14) ? cnpj : (existing.cnpjIndustria || cnpj),
+              nomeIndustria: (nomeIndustria && nomeIndustria !== 'Indústria Não Informada') ? nomeIndustria : (existing.nomeIndustria || nomeIndustria),
+              descricao: (descricao && (!existing.descricao || existing.descricao === 'Sem descrição' || descricao.length > existing.descricao.length)) ? descricao : existing.descricao,
               embalagem: (embalagem && embalagem !== 'UN') ? embalagem : existing.embalagem
-            };
+            });
             updatedCount++;
           } else {
-            const newProduct: Product = {
+            const newProduct: Product = sanitizeProductIndustry({
               codigo,
               descricao,
               embalagem,
@@ -674,11 +693,13 @@ export default function ImportView({
               custoMedio: 0,
               semVenda: 0,
               idade: 0
-            };
+            });
 
             const newIdx = updatedProductsList.length;
             updatedProductsList.push(newProduct);
             codeToIndexMap.set(codigo, newIdx);
+            const norm = normalizeProductCode(codigo);
+            if (norm) codeToIndexMap.set(norm, newIdx);
             if (descricao) descToIndexMap.set(descricao.trim().toLowerCase(), newIdx);
             insertedCount++;
           }

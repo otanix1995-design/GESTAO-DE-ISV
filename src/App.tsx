@@ -460,7 +460,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.products) && data.products.length > 0) {
-          setProducts(data.products.map((p: any) => ({ ...p, codigo: normalizeProductCode(p.codigo) })));
+          setProducts(deduplicateProducts(data.products));
         }
         if (Array.isArray(data.suppliers)) setSuppliers(data.suppliers);
         if (Array.isArray(data.promoters)) setPromoters(data.promoters);

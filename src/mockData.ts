@@ -203,16 +203,20 @@ export function saveData(data: {
 
 /**
  * Normalizes a product code according to the system rules:
+ * - Strip trailing decimal zeros from excel floats (e.g. 88027.0 -> 88027)
  * - Strip leading zeros (e.g. 00088027 -> 88027)
- * - Remove hyphen, slash, or space followed by trailing digits or suffix (e.g. 00088027-108 -> 88027)
+ * - Remove hyphen, slash, underscore, or space followed by trailing digits or suffix (e.g. 00088027-108 -> 88027)
  */
 export function normalizeProductCode(code: string | number): string {
   if (code === null || code === undefined) return '0';
   let str = String(code).trim();
   if (!str) return '0';
 
-  // Split at first occurrence of hyphen (-), slash (/), or space (\s) to isolate main code
-  let mainPart = str.split(/[\-\/\s]/)[0].trim();
+  // Strip trailing decimal zeros from excel floats (e.g. "88027.0" or "88027.00")
+  str = str.replace(/\.0+$/, '');
+
+  // Split at first occurrence of hyphen (-), slash (/), underscore (_), space (\s), or dot (.) to isolate main code
+  let mainPart = str.split(/[\-\/_\s\.]/)[0].trim();
   
   // Remove non-alphanumeric characters except letters/digits
   mainPart = mainPart.replace(/[^\w]/g, '');
@@ -224,6 +228,72 @@ export function normalizeProductCode(code: string | number): string {
 }
 
 /**
+ * Sanitizes product industry and CNPJ based on brand detection if erroneously tagged
+ */
+export function sanitizeProductIndustry(product: Product): Product {
+  if (!product) return product;
+  const descUpper = (product.descricao || '').toUpperCase();
+  const indUpper = (product.nomeIndustria || '').toUpperCase();
+
+  // TOZZI
+  if (descUpper.includes('TOZZI')) {
+    if (!product.cnpjIndustria || product.cnpjIndustria !== '04.476.996/0001-67' || indUpper.includes('UNILEVER') || indUpper.includes('NESTLÉ') || indUpper.includes('NÃO')) {
+      return {
+        ...product,
+        nomeIndustria: 'TOZZI IND E COM DE ALIMENTOS LTDA',
+        cnpjIndustria: '04.476.996/0001-67'
+      };
+    }
+  }
+
+  // Fix CEPERA / CPA products erroneously linked to Unilever or Nestle or unregistered
+  if (descUpper.includes('CEPERA') || descUpper.includes('MOLHO INGLES CEPERA') || descUpper.includes('TEMPERO PIMENTA SIRIA CPA') || descUpper.includes(' CPA')) {
+    if (!product.cnpjIndustria || product.cnpjIndustria !== '43.208.624/0001-20' || indUpper.includes('UNILEVER') || indUpper.includes('NESTLÉ') || indUpper.includes('NÃO')) {
+      return {
+        ...product,
+        nomeIndustria: 'CEPERA IND E COM DE ALIMENTOS',
+        cnpjIndustria: '43.208.624/0001-20'
+      };
+    }
+  }
+
+  // Fix YOKI products erroneously linked to Unilever or Nestle
+  if (descUpper.includes('YOKI')) {
+    if (!product.cnpjIndustria || product.cnpjIndustria !== '61.156.501/0001-56' || indUpper.includes('UNILEVER') || indUpper.includes('NESTLÉ') || indUpper.includes('NÃO')) {
+      return {
+        ...product,
+        nomeIndustria: 'YOKI / GENERAL MILLS',
+        cnpjIndustria: '61.156.501/0001-56'
+      };
+    }
+  }
+
+  // SEARA / FRIBOI / JBS
+  if (descUpper.includes('SEARA') || descUpper.includes('FRIBOI') || descUpper.includes('SWIFT')) {
+    if (!product.cnpjIndustria || product.cnpjIndustria !== '02.916.265/0001-60' || indUpper.includes('UNILEVER') || indUpper.includes('NESTLÉ') || indUpper.includes('NÃO')) {
+      return {
+        ...product,
+        nomeIndustria: 'JBS S/A',
+        cnpjIndustria: '02.916.265/0001-60'
+      };
+    }
+  }
+
+  // AMBEV / SPATEN / BRAHMA / SKOL / BUDWEISER
+  if (descUpper.includes('SPATEN') || descUpper.includes('BRAHMA') || descUpper.includes('SKOL') || descUpper.includes('BUDWEISER') || descUpper.includes('ANTARCTICA')) {
+    if (!product.cnpjIndustria || product.cnpjIndustria !== '03.016.124/0001-50' || indUpper.includes('UNILEVER') || indUpper.includes('NESTLÉ') || indUpper.includes('NÃO')) {
+      return {
+        ...product,
+        nomeIndustria: 'AMBEV S/A',
+        cnpjIndustria: '03.016.124/0001-50'
+      };
+    }
+  }
+
+  return product;
+}
+
+/**
  * Deduplicates and merges products by their normalized product code.
  * Ensures data consistency when merging Base Principal and Planilha Diária entries.
  */
@@ -232,8 +302,9 @@ export function deduplicateProducts(productsList: Product[]): Product[] {
   
   const map = new Map<string, Product>();
 
-  for (const rawP of productsList) {
-    if (!rawP) continue;
+  for (const rawPUnsanitized of productsList) {
+    if (!rawPUnsanitized) continue;
+    const rawP = sanitizeProductIndustry(rawPUnsanitized);
     const normCode = normalizeProductCode(rawP.codigo);
     if (!normCode) continue;
 
@@ -254,29 +325,33 @@ export function deduplicateProducts(productsList: Product[]): Product[] {
         return !lower.includes('genérica') && !lower.includes('não informada') && !lower.includes('desconhecida') && !lower.includes('não cadastrada');
       };
 
-      const hasBetterCnpj = rawP.cnpjIndustria && rawP.cnpjIndustria.length >= 14 && (!existing.cnpjIndustria || existing.cnpjIndustria.length < 14);
-      const hasBetterInd = isRealIndName(rawP.nomeIndustria) && !isRealIndName(existing.nomeIndustria);
-      
-      const merged: Product = {
+      const rawIndReal = isRealIndName(rawP.nomeIndustria);
+      const existingIndReal = isRealIndName(existing.nomeIndustria);
+
+      // Only adopt rawP's industry if rawP has a valid real industry AND existing does NOT have a real industry.
+      // Do NOT overwrite an existing real industry (e.g. from Base Principal) with secondary/guessed data!
+      const useRawPIndustry = rawIndReal && !existingIndReal;
+
+      const merged: Product = sanitizeProductIndustry({
         ...existing,
         codigo: normCode,
-        descricao: (rawP.descricao && rawP.descricao !== 'Sem descrição' && (existing.descricao === 'Sem descrição' || !existing.descricao)) ? rawP.descricao : existing.descricao,
+        descricao: (rawP.descricao && rawP.descricao !== 'Sem descrição' && (existing.descricao === 'Sem descrição' || !existing.descricao || rawP.descricao.length > existing.descricao.length)) ? rawP.descricao : existing.descricao,
         embalagem: (rawP.embalagem && rawP.embalagem !== 'UN' && existing.embalagem === 'UN') ? rawP.embalagem : existing.embalagem,
-        cnpjIndustria: (hasBetterCnpj || (rawP.cnpjIndustria && !existing.cnpjIndustria)) ? rawP.cnpjIndustria : existing.cnpjIndustria,
-        nomeIndustria: (hasBetterInd || (rawP.nomeIndustria && (!existing.nomeIndustria || existing.nomeIndustria === 'Indústria Não Informada'))) ? rawP.nomeIndustria : existing.nomeIndustria,
+        cnpjIndustria: useRawPIndustry ? rawP.cnpjIndustria : (existing.cnpjIndustria || rawP.cnpjIndustria),
+        nomeIndustria: useRawPIndustry ? rawP.nomeIndustria : (existing.nomeIndustria || rawP.nomeIndustria),
         estoque: Math.max(existing.estoque || 0, rawP.estoque || 0),
         estoqueFormatado: rawP.estoqueFormatado || existing.estoqueFormatado || '',
         valorDisponivel: Math.max(existing.valorDisponivel || 0, rawP.valorDisponivel || 0),
         custoMedio: rawP.custoMedio || existing.custoMedio || 0,
         semVenda: Math.max(existing.semVenda || 0, rawP.semVenda || 0),
         idade: Math.max(existing.idade || 0, rawP.idade || 0)
-      };
+      });
 
       map.set(normCode, merged);
     }
   }
 
-  return Array.from(map.values());
+  return Array.from(map.values()).map(p => sanitizeProductIndustry(p));
 }
 
 /**
