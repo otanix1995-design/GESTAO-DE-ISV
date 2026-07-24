@@ -16,7 +16,8 @@ import {
   Search,
   Check,
   X,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -76,6 +77,17 @@ export default function PromotoresAgenciasView({
   const [agencyName, setAgencyName] = useState('');
   const [agencySupervisorPhone, setAgencySupervisorPhone] = useState('');
   const [isAddAgencyOpen, setIsAddAgencyOpen] = useState(false);
+
+  // Edit Agency State
+  const [editingAgency, setEditingAgency] = useState<Agency | null>(null);
+  const [editAgencyName, setEditAgencyName] = useState('');
+  const [editAgencyPhone, setEditAgencyPhone] = useState('');
+
+  // Edit Promoter State
+  const [editingPromoter, setEditingPromoter] = useState<Promoter | null>(null);
+  const [editPromoterName, setEditPromoterName] = useState('');
+  const [editPromoterAg, setEditPromoterAg] = useState('');
+  const [editPromoterPhone, setEditPromoterPhone] = useState('');
 
   // Filter lists
   const filteredPromoters = useMemo(() => {
@@ -150,6 +162,92 @@ export default function PromotoresAgenciasView({
     setAgencyName('');
     setAgencySupervisorPhone('');
     setIsAddAgencyOpen(false);
+  };
+
+  // Handle open agency edit
+  const handleOpenEditAgency = (agency: Agency) => {
+    setEditingAgency(agency);
+    setEditAgencyName(agency.nome);
+    setEditAgencyPhone(formatPhoneNumber(agency.telefoneSupervisor || agency.cnpj || ''));
+  };
+
+  // Handle save agency edit
+  const handleSaveEditAgency = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAgency) return;
+    if (!editAgencyName.trim()) {
+      alert('O nome da agência é obrigatório.');
+      return;
+    }
+
+    const nameChanged = editAgencyName.trim().toLowerCase() !== editingAgency.nome.toLowerCase();
+    if (nameChanged) {
+      const exists = agencies.some(a => a.nome.toLowerCase() === editAgencyName.trim().toLowerCase());
+      if (exists) {
+        alert(`A agência [${editAgencyName}] já existe nas tabelas.`);
+        return;
+      }
+    }
+
+    const formattedPhone = formatPhoneNumber(editAgencyPhone) || 'Não informado';
+
+    // Update agencies
+    setAgencies(agencies.map(a => {
+      if (a.nome === editingAgency.nome) {
+        return {
+          ...a,
+          nome: editAgencyName.trim(),
+          telefoneSupervisor: formattedPhone
+        };
+      }
+      return a;
+    }));
+
+    // If name changed, update linked promoters
+    if (nameChanged) {
+      setPromoters(promoters.map(p => {
+        if (p.agencia.toLowerCase() === editingAgency.nome.toLowerCase()) {
+          return { ...p, agencia: editAgencyName.trim() };
+        }
+        return p;
+      }));
+    }
+
+    setEditingAgency(null);
+  };
+
+  // Handle open promoter edit
+  const handleOpenEditPromoter = (p: Promoter) => {
+    setEditingPromoter(p);
+    setEditPromoterName(p.nome);
+    setEditPromoterAg(p.agencia);
+    setEditPromoterPhone(formatPhoneNumber(p.contato || ''));
+  };
+
+  // Handle save promoter edit
+  const handleSaveEditPromoter = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPromoter) return;
+    if (!editPromoterName.trim() || !editPromoterAg) {
+      alert('Nome e Agência do promotor são obrigatórios.');
+      return;
+    }
+
+    const formattedPhone = formatPhoneNumber(editPromoterPhone) || '(45) 99999-0000';
+
+    setPromoters(promoters.map(p => {
+      if (p.nome === editingPromoter.nome) {
+        return {
+          ...p,
+          nome: editPromoterName.trim(),
+          agencia: editPromoterAg,
+          contato: formattedPhone
+        };
+      }
+      return p;
+    }));
+
+    setEditingPromoter(null);
   };
 
   // Handle delete promoter
@@ -287,13 +385,22 @@ export default function PromotoresAgenciasView({
                       </button>
                       
                       {canManage && (
-                        <button
-                          onClick={() => handleDeletePromoter(p.nome)}
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                          title="Apagar Promotor"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleOpenEditPromoter(p)}
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1 rounded-lg transition-colors border border-transparent hover:border-blue-100"
+                            title="Editar Promotor"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePromoter(p.nome)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                            title="Apagar Promotor"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -362,13 +469,22 @@ export default function PromotoresAgenciasView({
                         </td>
                         {canManage && (
                           <td className="p-4 text-center">
-                            <button
-                              onClick={() => handleDeleteAgency(a.nome)}
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors border border-transparent hover:border-red-100 inline-flex items-center"
-                              title="Apagar Agência"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleOpenEditAgency(a)}
+                                className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1.5 rounded-lg transition-colors border border-transparent hover:border-blue-100 inline-flex items-center"
+                                title="Editar Agência / Telefone do Supervisor"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteAgency(a.nome)}
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors border border-transparent hover:border-red-100 inline-flex items-center"
+                                title="Apagar Agência"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -518,6 +634,151 @@ export default function PromotoresAgenciasView({
                   className="px-5 py-2 bg-[#F58220] hover:bg-[#F58220]/90 text-white rounded-xl font-black shadow-md"
                 >
                   Salvar Agência
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* --- EDIT AGENCY MODAL --- */}
+      {editingAgency && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl max-w-sm w-full shadow-2xl p-6 relative"
+          >
+            <button 
+              onClick={() => setEditingAgency(null)}
+              className="absolute right-4 top-4 text-gray-400 hover:text-gray-650"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <h3 className="text-lg font-black text-gray-900 font-display flex items-center gap-2">
+              <Building2 className="text-[#F58220] w-6 h-6" /> Editar Agência
+            </h3>
+            
+            <form onSubmit={handleSaveEditAgency} className="mt-4 space-y-4 text-xs font-semibold text-gray-700">
+              <div>
+                <label className="block font-bold mb-1">NOME DA AGÊNCIA (REGISTRO)*</label>
+                <input
+                  type="text"
+                  required
+                  value={editAgencyName}
+                  onChange={(e) => setEditAgencyName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] text-xs font-bold text-gray-900"
+                  placeholder="EX. Agência Master Cascavel"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">NÚMERO DO SUPERVISOR (TELEFONE)</label>
+                <input
+                  type="text"
+                  value={editAgencyPhone}
+                  onChange={(e) => setEditAgencyPhone(formatPhoneNumber(e.target.value))}
+                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono text-xs font-bold"
+                  placeholder="(45) 98888-8888"
+                />
+                <p className="text-[10px] text-gray-400 mt-1 font-sans">
+                  Exemplo: <span className="font-mono font-bold">45988888888</span> é formatado como <span className="font-mono font-bold text-gray-600">(45) 98888-8888</span>
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setEditingAgency(null)}
+                  className="px-4 py-2 border rounded-xl font-bold text-gray-500 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#F58220] hover:bg-[#F58220]/90 text-white rounded-xl font-black shadow-md"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* --- EDIT PROMOTER MODAL --- */}
+      {editingPromoter && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl max-w-sm w-full shadow-2xl p-6 relative"
+          >
+            <button 
+              onClick={() => setEditingPromoter(null)}
+              className="absolute right-4 top-4 text-gray-400 hover:text-gray-650"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <h3 className="text-lg font-black text-gray-900 font-display flex items-center gap-2">
+              <Contact className="text-[#F58220] w-6 h-6" /> Editar Promotor
+            </h3>
+            
+            <form onSubmit={handleSaveEditPromoter} className="mt-4 space-y-4 text-xs font-semibold text-gray-700">
+              <div>
+                <label className="block font-bold mb-1">NOME COMPLETO DO PROMOTOR*</label>
+                <input
+                  type="text"
+                  required
+                  value={editPromoterName}
+                  onChange={(e) => setEditPromoterName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] text-xs font-bold text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">AGÊNCIA VINCULADA*</label>
+                <select
+                  required
+                  value={editPromoterAg}
+                  onChange={(e) => setEditPromoterAg(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] text-xs font-bold text-gray-900"
+                >
+                  <option value="">Selecione uma Agência...</option>
+                  {agencies.map((a) => (
+                    <option key={a.nome} value={a.nome}>
+                      {a.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold mb-1">TELEFONE DE CONTATO</label>
+                <input
+                  type="text"
+                  value={editPromoterPhone}
+                  onChange={(e) => setEditPromoterPhone(formatPhoneNumber(e.target.value))}
+                  className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono text-xs font-bold"
+                  placeholder="(45) 99999-0000"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setEditingPromoter(null)}
+                  className="px-4 py-2 border rounded-xl font-bold text-gray-500 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#F58220] hover:bg-[#F58220]/90 text-white rounded-xl font-black shadow-md"
+                >
+                  Salvar Alterações
                 </button>
               </div>
             </form>
