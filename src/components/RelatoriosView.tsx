@@ -112,10 +112,14 @@ export default function RelatoriosView({
       }
     });
 
-    // 2. Load from products list (Base Principal) to guarantee all registered products' industries are listed
-    products.forEach(p => {
+    // 2. Load from productsDerived list to guarantee all registered products' industries are listed accurately
+    productsDerived.forEach(p => {
       if (p.cnpjIndustria) {
-        industriesMap.set(p.cnpjIndustria.trim(), p.nomeIndustria?.trim() || p.cnpjIndustria.trim());
+        const cleanKey = p.cnpjIndustria.trim();
+        const existingName = industriesMap.get(cleanKey);
+        if (!existingName || existingName.toLowerCase().includes('genérica') || existingName.toLowerCase().includes('desconhecida')) {
+          industriesMap.set(cleanKey, p.nomeIndustria?.trim() || cleanKey);
+        }
       }
     });
 

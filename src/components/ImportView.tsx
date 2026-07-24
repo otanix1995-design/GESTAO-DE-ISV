@@ -483,8 +483,13 @@ export default function ImportView({
                               : codigo.startsWith('300') ? '61.068.276/0001-04' // Unilever
                               : '60.398.369/0001-85'; // Nestle
 
-            const matchedSupplier = suppliers.find(s => s.cnpjIndustria === guessedCnpj);
-            const nomeInd = matchedSupplier ? matchedSupplier.nomeIndustria : 'Indústria Genérica Auto-Mapeada';
+            const cleanGuessed = guessedCnpj.replace(/[^\d]/g, '');
+            const matchedSupplier = suppliers.find(s => s.cnpjIndustria && s.cnpjIndustria.replace(/[^\d]/g, '') === cleanGuessed);
+            const nomeInd = matchedSupplier ? matchedSupplier.nomeIndustria : 
+              (cleanGuessed === '02916265000160' ? 'JBS S/A' :
+               cleanGuessed === '03016124000150' ? 'AMBEV S/A' :
+               cleanGuessed === '61068276000104' ? 'UNILEVER BRASIL' :
+               cleanGuessed === '60398369000185' ? 'NESTLÉ BRASIL' : 'Indústria Não Cadastrada');
 
             const newProduct: Product = {
               codigo,

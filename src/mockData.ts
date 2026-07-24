@@ -24,7 +24,36 @@ export const INITIAL_AGENCIES: Agency[] = [];
 export const INITIAL_PROMOTERS: Promoter[] = [];
 
 // Initial Suppliers
-export const INITIAL_SUPPLIERS: Supplier[] = [];
+export const INITIAL_SUPPLIERS: Supplier[] = [
+  {
+    cnpjIndustria: '02.916.265/0001-60',
+    nomeIndustria: 'JBS S/A',
+    promotor: 'Sem Cadastro',
+    agencia: 'Sem Cadastro',
+    diasAtendimento: ['Segunda', 'Quarta', 'Sexta']
+  },
+  {
+    cnpjIndustria: '03.016.124/0001-50',
+    nomeIndustria: 'AMBEV S/A',
+    promotor: 'Sem Cadastro',
+    agencia: 'Sem Cadastro',
+    diasAtendimento: ['Terça', 'Quinta']
+  },
+  {
+    cnpjIndustria: '61.068.276/0001-04',
+    nomeIndustria: 'UNILEVER BRASIL',
+    promotor: 'Sem Cadastro',
+    agencia: 'Sem Cadastro',
+    diasAtendimento: ['Segunda', 'Sexta']
+  },
+  {
+    cnpjIndustria: '60.398.369/0001-85',
+    nomeIndustria: 'NESTLÉ BRASIL',
+    promotor: 'Sem Cadastro',
+    agencia: 'Sem Cadastro',
+    diasAtendimento: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']
+  }
+];
 
 // Initial Master Product Base (Base Principal)
 export const INITIAL_PRODUCTS: Product[] = [];
@@ -285,22 +314,50 @@ export function computeProductDerived(product: Product, suppliers: Supplier[], s
 
   // 1. Vincular fornecedor através do CNPJ da Indústria
   let matchedSupplier: Supplier | undefined = undefined;
-  if (suppliersMap) {
+  if (suppliersMap && productCnpjClean) {
     matchedSupplier = suppliersMap.get(productCnpjClean);
-  } else if (Array.isArray(suppliers)) {
+  } else if (Array.isArray(suppliers) && productCnpjClean) {
     matchedSupplier = suppliers.find((s) => {
       if (!s || !s.cnpjIndustria) return false;
       const supplierCnpjClean = String(s.cnpjIndustria).replace(/[^\d]/g, '');
-      return supplierCnpjClean !== '' && productCnpjClean !== '' && supplierCnpjClean === productCnpjClean;
+      return supplierCnpjClean !== '' && supplierCnpjClean === productCnpjClean;
     });
+  }
+
+  // If not matched by CNPJ, try matching supplier by name if product has a real non-generic name
+  if (!matchedSupplier && product && product.nomeIndustria && Array.isArray(suppliers)) {
+    const rawIndName = String(product.nomeIndustria).trim().toLowerCase();
+    if (rawIndName && !rawIndName.includes('genérica') && !rawIndName.includes('desconhecida') && !rawIndName.includes('não informada')) {
+      matchedSupplier = suppliers.find(s => s && s.nomeIndustria && s.nomeIndustria.trim().toLowerCase() === rawIndName);
+    }
   }
 
   const promotor = matchedSupplier ? (matchedSupplier.promotor || 'Sem Cadastro') : 'Sem Cadastro';
   const agencia = matchedSupplier ? (matchedSupplier.agencia || 'Sem Cadastro') : 'Sem Cadastro';
   const diasAtendimento = matchedSupplier ? (matchedSupplier.diasAtendimento || []) : [];
 
-  const cnpjIndustria = product ? (product.cnpjIndustria || '') : '';
-  const nomeIndustria = product ? (product.nomeIndustria || 'Indústria Desconhecida') : 'Indústria Desconhecida';
+  const cnpjIndustria = product ? (product.cnpjIndustria || (matchedSupplier ? matchedSupplier.cnpjIndustria : '')) : '';
+
+  // Determine industry name dynamically
+  let nomeIndustria = '';
+  const rawProductInd = product ? String(product.nomeIndustria || '').trim() : '';
+  const isGeneric = !rawProductInd || 
+    rawProductInd.toLowerCase().includes('genérica') || 
+    rawProductInd.toLowerCase().includes('desconhecida') || 
+    rawProductInd.toLowerCase().includes('não informada');
+
+  if (matchedSupplier && matchedSupplier.nomeIndustria && matchedSupplier.nomeIndustria.trim()) {
+    nomeIndustria = matchedSupplier.nomeIndustria.trim();
+  } else if (!isGeneric) {
+    nomeIndustria = rawProductInd;
+  } else {
+    // Fallback mapping for standard CNPJs if supplier record not present
+    if (productCnpjClean === '02916265000160') nomeIndustria = 'JBS S/A';
+    else if (productCnpjClean === '03016124000150') nomeIndustria = 'AMBEV S/A';
+    else if (productCnpjClean === '61068276000104') nomeIndustria = 'UNILEVER BRASIL';
+    else if (productCnpjClean === '60398369000185') nomeIndustria = 'NESTLÉ BRASIL';
+    else nomeIndustria = 'Indústria Não Cadastrada';
+  }
 
   // 2. Fórmulas de estoque (with default null/undefined checks)
   const estoqueTotal = product && typeof product.estoque === 'number' && !isNaN(product.estoque)
@@ -333,8 +390,10 @@ export function computeProductDerived(product: Product, suppliers: Supplier[], s
   const isPrioridadeOperacional = !isPossivelAjuste;
   const classificacao = isPossivelAjuste ? 'Possível Ajuste' : status;
 
+  const safeProduct: Product = product ? { ...product, cnpjIndustria, nomeIndustria } : { codigo: '?', descricao: 'Inválido', embalagem: '?', cnpjIndustria, nomeIndustria, estoque: 0, valorDisponivel: 0, custoMedio: 0, semVenda: 0 };
+
   return {
-    product: product || { codigo: '?', descricao: 'Inválido', embalagem: '?', cnpjIndustria: '', nomeIndustria: 'Inválido', estoque: 0, valorDisponivel: 0, custoMedio: 0, semVenda: 0 },
+    product: safeProduct,
     estoqueTotal,
     valorEstoque,
     status,
