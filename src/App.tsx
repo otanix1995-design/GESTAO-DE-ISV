@@ -166,16 +166,23 @@ export default function App() {
           const localHasProducts = Array.isArray(initialData.products) && initialData.products.length > 0;
           const serverHasProducts = Array.isArray(res.data.products) && res.data.products.length > 0;
 
+          const localCount = localHasProducts ? initialData.products.length : 0;
+          const serverCount = serverHasProducts ? res.data.products.length : 0;
+
           // We adopt the server state if:
-          // 1. Server has a newer timestamp AND server is actually populated (or it is a reset)
-          // 2. OR local storage is empty, but server is populated
+          // 1. Server has equal or MORE products than local storage (e.g. server has imported spreadsheet data)
+          // 2. OR Server has equal or newer timestamp
+          // 3. OR local storage has no products
           const isReset = res.data.lastUpdateTime === '2026-06-04T07:30:00Z';
-          if ((serverTimeMs > localTimeMs && (serverHasProducts || isReset)) || (!localHasProducts && serverHasProducts)) {
+          if (serverHasProducts && (serverCount >= localCount || serverTimeMs >= localTimeMs || isReset)) {
             s = res.data;
-            sSource = 'server';
+            sSource = `server (${serverCount} produtos vs local ${localCount})`;
+          } else if (serverTimeMs > localTimeMs) {
+            s = res.data;
+            sSource = 'server (timestamp mais recente)';
           } else {
             s = initialData;
-            sSource = 'localStorage (preferred - newer or has data)';
+            sSource = 'localStorage';
           }
         } else {
           s = initialData;
@@ -597,11 +604,12 @@ export default function App() {
           <ImportView
             products={products}
             setProducts={setProducts}
+            suppliers={suppliers}
+            setSuppliers={setSuppliers}
             currentUser={currentUser}
             impHistory={impHistory}
             setImpHistory={setImpHistory}
             onUpdateStats={handleUpdateStatsTimeline}
-            suppliers={suppliers}
           />
         );
       case 'base_principal':

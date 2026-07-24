@@ -223,21 +223,23 @@ function detectBasePrincipalColumns(rows: string[][], fallbackIndices: MappingIn
 interface ImportViewProps {
   products: Product[];
   setProducts: (products: Product[]) => void;
+  suppliers: Supplier[];
+  setSuppliers?: (suppliers: Supplier[]) => void;
   currentUser: User;
   impHistory: ImportHistoryEntry[];
   setImpHistory: (history: ImportHistoryEntry[]) => void;
   onUpdateStats: (newTimestamp: string) => void;
-  suppliers: Supplier[];
 }
 
 export default function ImportView({ 
   products, 
   setProducts, 
+  suppliers,
+  setSuppliers,
   currentUser, 
   impHistory, 
   setImpHistory, 
-  onUpdateStats,
-  suppliers
+  onUpdateStats
 }: ImportViewProps) {
   const isAdmin = currentUser.role === 'Admin';
   const [importType, setImportType] = useState<'EstoqueDiario' | 'BasePrincipal'>('EstoqueDiario');
@@ -535,6 +537,9 @@ export default function ImportView({
         outputLog.push(`=> Código detectado na Coluna ${iCodigo + 1}`);
         outputLog.push(`=> Descrição detectada na Coluna ${iDescricao + 1}`);
 
+        const updatedSuppliersList = [...suppliers];
+        let newSuppliersCount = 0;
+
         rows.forEach((row, rowIndex) => {
           const cols = splitRowColumns(row);
           if (cols.length < 1 || !cols[0]) return;
@@ -546,6 +551,21 @@ export default function ImportView({
           const embalagem = cols[iEmbalagem] || 'UN';
           const cnpj = formatCnpj(cols[iCnpj] || '');
           const nomeIndustria = cols[iNomeIndustria] || 'Indústria Não Informada';
+
+          // Auto register supplier if CNPJ is valid and not yet in suppliers list
+          if (cnpj && cnpj.length >= 14 && setSuppliers) {
+            const supplierExists = updatedSuppliersList.some(s => s.cnpjIndustria === cnpj);
+            if (!supplierExists) {
+              updatedSuppliersList.push({
+                cnpjIndustria: cnpj,
+                nomeIndustria: nomeIndustria !== 'Indústria Não Informada' ? nomeIndustria : `Indústria CNPJ ${cnpj}`,
+                promotor: 'Sem Cadastro',
+                agencia: 'Sem Cadastro',
+                diasAtendimento: []
+              });
+              newSuppliersCount++;
+            }
+          }
 
           const existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo);
           if (existingIndex !== -1) {
@@ -578,6 +598,11 @@ export default function ImportView({
             insertedCount++;
           }
         });
+
+        if (newSuppliersCount > 0 && setSuppliers) {
+          setSuppliers(updatedSuppliersList);
+          outputLog.push(`Fornecedores Mapeados: ${newSuppliersCount} novas indústrias cadastradas automaticamente.`);
+        }
 
         outputLog.push(`Cadastro Mestre Processado.`);
         outputLog.push(`Sucesso: ${insertedCount} novos produtos inseridos.`);

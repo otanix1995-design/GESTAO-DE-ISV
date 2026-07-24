@@ -4,6 +4,7 @@
  */
 
 import { Product, Supplier, Promoter, Agency, SupplierHistoryEntry, ImportHistoryEntry, Role, User, SystemStats } from './types';
+import { saveIDB } from './idb';
 
 // Single official user for Filial 172 Cascavel
 export const TEST_USERS: User[] = [
@@ -107,10 +108,19 @@ export function saveData(data: {
 }) {
   if (typeof window === 'undefined') return;
 
-  try {
-    if (data.products) localStorage.setItem(KEYS.PRODUCTS, JSON.stringify(data.products));
-  } catch (e) {
-    console.warn("Could not save products to localStorage (probably exceeded storage quota):", e);
+  let productsSavedInLS = true;
+
+  if (data.products) {
+    // Save to IndexedDB as high-capacity primary browser cache
+    saveIDB(KEYS.PRODUCTS, data.products);
+
+    try {
+      localStorage.setItem(KEYS.PRODUCTS, JSON.stringify(data.products));
+    } catch (e) {
+      console.warn("Could not save products to localStorage (exceeded quota, relying on Express/Firestore/IndexedDB):", e);
+      productsSavedInLS = false;
+      try { localStorage.removeItem(KEYS.PRODUCTS); } catch (_) {}
+    }
   }
 
   try {
@@ -149,12 +159,16 @@ export function saveData(data: {
     console.warn("Could not save currentUser to localStorage:", e);
   }
 
-  try {
-    if (data.lastUpdateTime) {
-      localStorage.setItem(KEYS.LAST_UPDATE_TIME, data.lastUpdateTime);
+  // Only update LocalStorage timestamp if products were successfully stored locally
+  // or if products were not part of this save payload
+  if (productsSavedInLS || !data.products) {
+    try {
+      if (data.lastUpdateTime) {
+        localStorage.setItem(KEYS.LAST_UPDATE_TIME, data.lastUpdateTime);
+      }
+    } catch (e) {
+      console.warn("Could not save lastUpdateTime to localStorage:", e);
     }
-  } catch (e) {
-    console.warn("Could not save lastUpdateTime to localStorage:", e);
   }
 }
 
