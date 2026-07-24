@@ -1,0 +1,35 @@
+{
+  "entities": {
+    "state": {
+      "description": "Global application state synced in real-time across online users",
+      "documents": {
+        "current": {
+          "fields": {
+            "suppliers": "array",
+            "promoters": "array",
+            "agencies": "array",
+            "supHistory": "array",
+            "impHistory": "array",
+            "lastUpdateTime": "string"
+          }
+        },
+        "products_metadata": {
+          "fields": {
+            "numChunks": "number",
+            "lastUpdateTime": "string"
+          }
+        }
+      }
+    },
+    "online_users": {
+      "description": "Active online users currently logged in",
+      "fields": {
+        "userId": "string",
+        "userName": "string",
+        "userRole": "string",
+        "lastSeen": "string",
+        "status": "string"
+      }
+    }
+  }
+}

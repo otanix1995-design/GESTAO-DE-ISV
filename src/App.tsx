@@ -10,8 +10,8 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from './lib/firebase';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
-import Header from './components/Header';
+import { doc, collection, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import Header, { OnlineUserPresence } from './components/Header';
 import Sidebar, { ActiveTab } from './components/Sidebar';
 import DashboardView from './components/DashboardView';
 import ImportView from './components/ImportView';
@@ -63,11 +63,14 @@ export default function App() {
   const [agencies, setAgencies] = useState<Agency[]>(initialData.agencies || []);
   const [supHistory, setSupHistory] = useState<SupplierHistoryEntry[]>(initialData.supHistory || []);
   const [impHistory, setImpHistory] = useState<ImportHistoryEntry[]>(initialData.impHistory || []);
-  const [currentUser, setCurrentUser] = useState<User>(initialData.currentUser || { id: '1', role: 'Admin', name: 'Filial 172 Cascavel', email: 'danilo.gerencia@atacadao.com.br' });
+  const [currentUser, setCurrentUser] = useState<User>(initialData.currentUser || { id: '1', role: 'Admin', name: 'Danilo (Gerente Filial 172)', email: 'danilo.gerencia@atacadao.com.br' });
   const [lastUpdateTime, setLastUpdateTime] = useState<string>(initialData.lastUpdateTime || '2026-06-04T07:30:00Z');
   
   const [hasLoadedFromServer, setHasLoadedFromServer] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUserPresence[]>([]);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastRemoteUpdateToast, setLastRemoteUpdateToast] = useState<string | null>(null);
 
   // Reference to track the timestamp of the last local change made by this client
   const lastLocalChangeTime = useRef<number>(0);
@@ -77,6 +80,58 @@ export default function App() {
   useEffect(() => {
     lastUpdateTimeRef.current = lastUpdateTime;
   }, [lastUpdateTime]);
+
+  // Online User Heartbeat in Firestore (posts current user online status every 15s)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const userDocRef = doc(db, 'online_users', currentUser.id);
+
+    const updatePresence = async () => {
+      try {
+        await setDoc(userDocRef, {
+          id: currentUser.id,
+          name: currentUser.name,
+          role: currentUser.role,
+          email: currentUser.email || '',
+          lastSeen: new Date().toISOString(),
+          status: 'online'
+        }, { merge: true });
+      } catch (err) {
+        console.warn("Presença de usuário online:", err);
+      }
+    };
+
+    updatePresence();
+    const timer = setInterval(updatePresence, 15000);
+    return () => clearInterval(timer);
+  }, [currentUser]);
+
+  // Real-time listener for all active online users
+  useEffect(() => {
+    const colRef = collection(db, 'online_users');
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const now = Date.now();
+      const active: OnlineUserPresence[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as OnlineUserPresence;
+        // Consider active if updated within the last 3 minutes
+        if (data.lastSeen && (now - Date.parse(data.lastSeen)) < 180000) {
+          active.push(data);
+        }
+      });
+      setOnlineUsers(active);
+    }, (err) => {
+      console.warn("Erro ao ouvir usuários online:", err);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const triggerToast = (msg: string) => {
+    setLastRemoteUpdateToast(msg);
+    setTimeout(() => {
+      setLastRemoteUpdateToast(null);
+    }, 5000);
+  };
 
   // Tabs routes & Mobile navigation rails
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -422,6 +477,27 @@ export default function App() {
 
   }, [products, suppliers, promoters, agencies, supHistory, impHistory, hasLoadedFromServer, isResetting]);
 
+  const handleForceSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/data');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.products) && data.products.length > 0) {
+          setProducts(data.products.map((p: any) => ({ ...p, codigo: normalizeProductCode(p.codigo) })));
+        }
+        if (Array.isArray(data.suppliers)) setSuppliers(data.suppliers);
+        if (Array.isArray(data.promoters)) setPromoters(data.promoters);
+        if (Array.isArray(data.agencies)) setAgencies(data.agencies);
+        triggerToast("Sincronização ao vivo forçada com sucesso!");
+      }
+    } catch (err) {
+      console.warn("Erro ao forçar sincronização:", err);
+    } finally {
+      setTimeout(() => setIsSyncing(false), 600);
+    }
+  };
+
   // Handle active role selector changes (ensure safe tab redirects on permission change)
   const handleUserChange = (newUser: User) => {
     setCurrentUser(newUser);
@@ -618,6 +694,10 @@ export default function App() {
           currentUser={currentUser}
           onUserChange={handleUserChange}
           stats={systemStats}
+          onlineUsers={onlineUsers}
+          isSyncing={isSyncing}
+          onForceSync={handleForceSync}
+          lastRemoteUpdateToast={lastRemoteUpdateToast}
         />
 
         {/* --- GLOBAL SEARCH EXTRA RAIL BAR (Only showing if tab supports queries) --- */}

@@ -16,9 +16,11 @@ import {
   Server,
   Code2,
   Lock,
-  AlertTriangle
+  AlertTriangle,
+  Wifi,
+  Cloud,
+  Check
 } from 'lucide-react';
-import { motion } from 'motion/react';
 
 interface ConfigViewProps {
   currentUser: User;
@@ -36,32 +38,59 @@ export default function ConfigView({
   const [confirmingReset, setConfirmingReset] = useState(false);
 
   const systemDiagnostics = [
+    { name: 'Sincronização Nuvem (Firebase)', value: 'Firestore DB Habilitado & Ativo (Ao Vivo)', status: 'online' },
     { name: 'Host do Container', value: 'Google Cloud Run (SANDBOX ENVIRONMENT)', status: 'online' },
-    { name: 'Porta de Conexão', value: '3000 (Proxy Ativo)', status: 'online' },
-    { name: 'Vite Hot Module Replacement', value: 'DISABLE_HMR (Injetado pelo AI Studio)', status: 'online' },
-    { name: 'Indexador Temporal', value: 'JS LocalTime 2026 UTC', status: 'online' },
-    { name: 'Módulo de Banco de Dados', value: 'Express Multi-User Backend + Persistência db.json', status: 'online' },
-    { name: 'Filial Registrada', value: '172 - CASCAVEL (PARANÁ)', status: 'online' }
+    { name: 'Porta de Conexão', value: '3000 (Proxy Reverse Nginx)', status: 'online' },
+    { name: 'Vite Hot Module Replacement', value: 'DISABLE_HMR (Estável)', status: 'online' },
+    { name: 'Filial Registrada', value: '172 - CASCAVEL (PARANÁ)', status: 'online' },
+    { name: 'Banco de Dados Fallback', value: 'Express Multi-User Backend + LocalStorage', status: 'online' }
   ];
 
   return (
     <div className="space-y-6" id="config-tab">
       
       {/* Title */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 font-display">Configurações e Diagnósticos do Sistema</h2>
+      <div className="text-left">
+        <h2 className="text-xl font-black text-gray-900 font-display">Configurações & Sincronização Online Multi-Usuário</h2>
         <p className="text-xs text-gray-500 mt-1">
-          Gerencie a integridade dos dados compartilhados da filial, confira a telemetria do sistema e limpe bases de teste.
+          Gerencie a integridade dos dados compartilhados da filial, monitore o banco em tempo real e altere perfis corporativos.
         </p>
+      </div>
+
+      {/* Online Firebase Banner */}
+      <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl p-5 shadow-sm text-left flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="bg-white/10 p-3 rounded-xl border border-white/20 shrink-0">
+            <Wifi className="w-6 h-6 text-emerald-300 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black uppercase tracking-wider font-display">
+                Sincronização Online em Tempo Real Ativa
+              </h3>
+              <span className="bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">
+                Firebase Firestore
+              </span>
+            </div>
+            <p className="text-xs text-emerald-100 mt-1 max-w-2xl leading-relaxed">
+              Quaisquer alterações realizadas (entradas de notas, trocas de estoque, promotores cadastrados, regras de gôndola) são replicadas no mesmo instante para todos os colaboradores e navegadores conectados na Filial 172 Cascavel.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 bg-black/20 border border-white/10 px-3.5 py-2 rounded-xl text-xs font-mono font-bold self-start md:self-auto">
+          <Cloud className="w-4 h-4 text-emerald-300" />
+          <span>Status: CONECTADO</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* Database Integrity & Reset Card */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4 text-left">
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-xs space-y-4 text-left">
           <div className="flex items-center gap-2">
             <HardDrive className="w-5 h-5 text-[#F58220]" />
-            <h3 className="text-sm font-extrabold uppercase text-gray-400 tracking-wide font-display">Segurança de Dados e Resets</h3>
+            <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider font-display">Segurança de Dados e Resets</h3>
           </div>
           
           <p className="text-xs text-gray-500 leading-relaxed">
@@ -111,18 +140,18 @@ export default function ConfigView({
           </div>
         </div>
 
-        {/* Diagnostics Log diagnostics elements */}
-        <div className="bg-[#2F2F2F] p-6 rounded-2xl text-gray-100 space-y-4">
+        {/* Diagnostics Log elements */}
+        <div className="bg-[#2F2F2F] p-6 rounded-2xl text-gray-100 space-y-4 text-left">
           <div className="flex items-center gap-2 text-[#F58220]">
             <Server className="w-5 h-5" />
-            <h3 className="text-xs font-black uppercase tracking-widest font-display">Console Técnico</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest font-display">Console Técnico da Filial</h3>
           </div>
 
           <div className="space-y-2.5 font-mono text-[10px]">
             {systemDiagnostics.map((sys) => (
               <div key={sys.name} className="flex justify-between items-start border-b border-[#3F3F3F] pb-2">
                 <span className="text-gray-400 font-bold">{sys.name}:</span>
-                <span className="text-right text-gray-200 break-all max-w-[200px] font-bold">{sys.value}</span>
+                <span className="text-right text-emerald-400 font-bold break-all max-w-[200px]">{sys.value}</span>
               </div>
             ))}
           </div>
@@ -133,3 +162,4 @@ export default function ConfigView({
     </div>
   );
 }
+

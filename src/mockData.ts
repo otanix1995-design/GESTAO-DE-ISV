@@ -5,9 +5,13 @@
 
 import { Product, Supplier, Promoter, Agency, SupplierHistoryEntry, ImportHistoryEntry, Role, User, SystemStats } from './types';
 
-// Predefined testing users for role selection
+// Predefined team users for role selection and multi-user login
 export const TEST_USERS: User[] = [
-  { id: '1', name: 'Filial 172 Cascavel', role: 'Admin', email: 'danilo.gerencia@atacadao.com.br' }
+  { id: '1', name: 'Danilo (Gerente Filial 172)', role: 'Admin', email: 'danilo.gerencia@atacadao.com.br' },
+  { id: '2', name: 'Juliana Silva (Supervisora Operacional)', role: 'Gestor', email: 'juliana.supervisao@atacadao.com.br' },
+  { id: '3', name: 'Carlos Santos (Auditor de Estoque)', role: 'Gestor', email: 'carlos.auditoria@atacadao.com.br' },
+  { id: '4', name: 'Mariana Costa (Promotora Nestlé / Bauducco)', role: 'Promotor', email: 'mariana.promotora@agenciavista.com.br' },
+  { id: '5', name: 'Roberto Lima (Promotor Ambev / Unilever)', role: 'Promotor', email: 'roberto.promotor@agenciatopo.com.br' }
 ];
 
 /// Initial Agencies
