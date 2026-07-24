@@ -63,7 +63,11 @@ export default function App() {
   const [agencies, setAgencies] = useState<Agency[]>(initialData.agencies || []);
   const [supHistory, setSupHistory] = useState<SupplierHistoryEntry[]>(initialData.supHistory || []);
   const [impHistory, setImpHistory] = useState<ImportHistoryEntry[]>(initialData.impHistory || []);
-  const [currentUser, setCurrentUser] = useState<User>(initialData.currentUser || { id: '1', role: 'Admin', name: 'Danilo (Gerente Filial 172)', email: 'danilo.gerencia@atacadao.com.br' });
+  const [currentUser, setCurrentUser] = useState<User>(
+    (initialData.currentUser && initialData.currentUser.email === 'atacadaocascavel@atacadao.com')
+      ? initialData.currentUser
+      : { id: '1', role: 'Admin', name: 'Atacadão Filial 172 Cascavel', email: 'atacadaocascavel@atacadao.com', password: 'filial@172' }
+  );
   const [lastUpdateTime, setLastUpdateTime] = useState<string>(initialData.lastUpdateTime || '2026-06-04T07:30:00Z');
   
   const [hasLoadedFromServer, setHasLoadedFromServer] = useState(false);

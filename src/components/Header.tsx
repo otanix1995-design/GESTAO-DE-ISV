@@ -16,7 +16,6 @@ import {
   Clock, 
   Wifi, 
   ShieldCheck, 
-  UserPlus, 
   Check, 
   X, 
   Sparkles,
@@ -54,12 +53,12 @@ export default function Header({
 }: HeaderProps) {
   const [time, setTime] = useState(new Date());
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [modalTab, setModalTab] = useState<'switch' | 'online' | 'custom'>('switch');
+  const [modalTab, setModalTab] = useState<'switch' | 'online'>('switch');
 
-  // Custom user login state
-  const [customName, setCustomName] = useState('');
-  const [customEmail, setCustomEmail] = useState('');
-  const [customRole, setCustomRole] = useState<'Admin' | 'Gestor' | 'Promotor'>('Gestor');
+  // Password verification state
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -106,19 +105,28 @@ export default function Header({
     }
   };
 
-  const handleCreateCustomUser = (e: React.FormEvent) => {
+  const handleAuthenticateOfficialUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customName.trim()) return;
-    const newUser: User = {
-      id: 'custom_' + Date.now(),
-      name: customName.trim(),
-      email: customEmail.trim() || `${customName.toLowerCase().replace(/\s+/g, '.')}@atacadao.com.br`,
-      role: customRole
-    };
-    onUserChange(newUser);
-    setCustomName('');
-    setCustomEmail('');
-    setIsLoginModalOpen(false);
+    if (passwordInput.trim() === 'filial@172') {
+      const officialUser: User = {
+        id: '1',
+        name: 'Atacadão Filial 172 Cascavel',
+        role: 'Admin',
+        email: 'atacadaocascavel@atacadao.com',
+        password: 'filial@172'
+      };
+      onUserChange(officialUser);
+      setPasswordError(null);
+      setAuthSuccessMsg("Autenticado com sucesso na Filial 172!");
+      setPasswordInput('');
+      setTimeout(() => {
+        setAuthSuccessMsg(null);
+        setIsLoginModalOpen(false);
+      }, 1500);
+    } else {
+      setPasswordError("Senha incorreta! A senha oficial da filial é filial@172");
+      setAuthSuccessMsg(null);
+    }
   };
 
   const uniqueOnlineUsers = onlineUsers.length > 0 ? onlineUsers : [
@@ -308,13 +316,14 @@ export default function Header({
               <div className="flex border-b border-gray-100 bg-gray-50/80 px-5 pt-3 gap-2">
                 <button
                   onClick={() => setModalTab('switch')}
-                  className={`px-4 py-2 text-xs font-extrabold rounded-t-xl transition-all cursor-pointer ${
+                  className={`px-4 py-2 text-xs font-extrabold rounded-t-xl transition-all cursor-pointer flex items-center gap-1.5 ${
                     modalTab === 'switch'
                       ? 'bg-white text-[#F58220] border-t-2 border-[#F58220] shadow-2xs'
                       : 'text-gray-500 hover:text-gray-800'
                   }`}
                 >
-                  Alternar Login Existente
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#F58220]" />
+                  Acesso Oficial (Filial 172)
                 </button>
                 <button
                   onClick={() => setModalTab('online')}
@@ -327,69 +336,84 @@ export default function Header({
                   <Wifi className="w-3.5 h-3.5 text-emerald-500" />
                   Usuários Online ({uniqueOnlineUsers.length})
                 </button>
-                <button
-                  onClick={() => setModalTab('custom')}
-                  className={`px-4 py-2 text-xs font-extrabold rounded-t-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                    modalTab === 'custom'
-                      ? 'bg-white text-blue-600 border-t-2 border-blue-500 shadow-2xs'
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  <UserPlus className="w-3.5 h-3.5 text-blue-500" />
-                  Novo Cadastro
-                </button>
               </div>
 
               {/* Modal Body */}
               <div className="p-6 overflow-y-auto space-y-4 flex-1">
                 
-                {/* TAB 1: SWITCH PREDEFINED USERS */}
+                {/* TAB 1: OFFICIAL USER AUTHENTICATION */}
                 {modalTab === 'switch' && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-gray-500">
-                      Selecione o seu perfil de colaborador para assumir as permissões e operar a plataforma online:
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Usuário corporativo oficial cadastrado para a Filial 172 Cascavel:
                     </p>
-                    <div className="space-y-2.5">
-                      {TEST_USERS.map((user) => {
-                        const isCurrent = currentUser.id === user.id;
-                        return (
-                          <div
-                            key={user.id}
-                            onClick={() => {
-                              onUserChange(user);
-                              setIsLoginModalOpen(false);
-                            }}
-                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                              isCurrent
-                                ? 'bg-orange-50/80 border-[#F58220] shadow-xs'
-                                : 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-xl text-white font-black text-xs ${
-                                user.role === 'Admin' ? 'bg-red-500' : user.role === 'Gestor' ? 'bg-blue-600' : 'bg-emerald-600'
-                              }`}>
-                                {user.name.slice(0, 2).toUpperCase()}
-                              </div>
-                              <div>
-                                <div className="text-xs font-bold text-gray-900 flex items-center gap-2">
-                                  <span>{user.name}</span>
-                                  {isCurrent && (
-                                    <span className="bg-[#F58220] text-white text-[9px] px-2 py-0.2 rounded-full font-black uppercase">
-                                      Ativo
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[11px] text-gray-500 font-medium mt-0.5">{user.email}</div>
-                              </div>
-                            </div>
-                            <span className={`text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wider ${getRoleBadgeColor(user.role)}`}>
-                              {user.role}
-                            </span>
+
+                    <div className="p-4 rounded-2xl bg-orange-50/80 border border-[#F58220]/60 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-[#F58220] text-white p-2.5 rounded-xl font-black text-sm">
+                            AT
                           </div>
-                        );
-                      })}
+                          <div>
+                            <div className="text-xs font-black text-gray-900 flex items-center gap-2">
+                              <span>Atacadão Filial 172 Cascavel</span>
+                              <span className="bg-[#F58220] text-white text-[9px] px-2 py-0.5 rounded-full font-black uppercase">
+                                Conta Única
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-700 font-semibold mt-0.5 font-mono">
+                              atacadaocascavel@atacadao.com
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] px-2.5 py-1 rounded-full font-extrabold uppercase tracking-wider bg-red-100 text-red-800 border border-red-200">
+                          Admin / Master
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t border-orange-200/60 text-xs text-gray-600 flex items-center justify-between font-mono">
+                        <span>Senha Oficial: <strong className="text-gray-900 font-bold">filial@172</strong></span>
+                        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-md">Ativo e Autenticado</span>
+                      </div>
                     </div>
+
+                    <form onSubmit={handleAuthenticateOfficialUser} className="bg-gray-50 p-4 rounded-2xl border border-gray-200 space-y-3">
+                      <label className="block text-xs font-bold text-gray-800">
+                        Confirmar Senha de Acesso (filial@172)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          required
+                          value={passwordInput}
+                          onChange={(e) => {
+                            setPasswordInput(e.target.value);
+                            setPasswordError(null);
+                          }}
+                          placeholder="Digite a senha: filial@172"
+                          className="flex-1 text-xs p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#F58220] focus:outline-none bg-white font-mono"
+                        />
+                        <button
+                          type="submit"
+                          className="px-4 py-2.5 bg-[#F58220] hover:bg-[#e07318] text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0"
+                        >
+                          <Check className="w-4 h-4" /> Entrar / Validar
+                        </button>
+                      </div>
+
+                      {passwordError && (
+                        <div className="text-xs font-bold text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-200">
+                          {passwordError}
+                        </div>
+                      )}
+
+                      {authSuccessMsg && (
+                        <div className="text-xs font-bold text-emerald-700 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200 flex items-center gap-2">
+                          <Check className="w-4 h-4 text-emerald-600" />
+                          <span>{authSuccessMsg}</span>
+                        </div>
+                      )}
+                    </form>
                   </div>
                 )}
 
@@ -405,7 +429,7 @@ export default function Header({
                     </div>
 
                     <p className="text-xs text-gray-500">
-                      Dispositivos e colaboradores que estão online na mesma base da Filial 172 neste momento:
+                      Dispositivos e colaboradores conectados ao vivo nesta filial:
                     </p>
 
                     <div className="space-y-2">
@@ -415,7 +439,7 @@ export default function Header({
                             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                             <div>
                               <div className="text-xs font-extrabold text-gray-900">{u.name}</div>
-                              <div className="text-[10px] text-gray-400 font-mono">{u.email || 'online.user@atacadao.com.br'}</div>
+                              <div className="text-[10px] text-gray-400 font-mono">{u.email || 'atacadaocascavel@atacadao.com'}</div>
                             </div>
                           </div>
                           <div className="text-right">
@@ -428,58 +452,6 @@ export default function Header({
                       ))}
                     </div>
                   </div>
-                )}
-
-                {/* TAB 3: CUSTOM LOGIN FORM */}
-                {modalTab === 'custom' && (
-                  <form onSubmit={handleCreateCustomUser} className="space-y-4">
-                    <p className="text-xs text-gray-500">
-                      Cadastre e entre instantaneamente com o seu próprio nome e cargo de filial:
-                    </p>
-
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1">Nome Completo do Colaborador *</label>
-                      <input
-                        type="text"
-                        required
-                        value={customName}
-                        onChange={(e) => setCustomName(e.target.value)}
-                        placeholder="Ex: Pedro Henrique (Auditor de Estoque)"
-                        className="w-full text-xs p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#F58220] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1">E-mail Corporativo</label>
-                      <input
-                        type="email"
-                        value={customEmail}
-                        onChange={(e) => setCustomEmail(e.target.value)}
-                        placeholder="Ex: pedro.estoque@atacadao.com.br"
-                        className="w-full text-xs p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#F58220] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1">Nível de Acesso (Cargo) *</label>
-                      <select
-                        value={customRole}
-                        onChange={(e) => setCustomRole(e.target.value as any)}
-                        className="w-full text-xs p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#F58220] focus:outline-none bg-white"
-                      >
-                        <option value="Gestor">Gestor (Acesso Total de Operações)</option>
-                        <option value="Admin">Admin (Acesso Master & Gerência)</option>
-                        <option value="Promotor">Promotor (Acesso Restrito a Agentes de Marca)</option>
-                      </select>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full py-3 bg-[#F58220] hover:bg-[#e07318] text-white rounded-xl text-xs font-black shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Check className="w-4 h-4" /> Entrar com este Perfil
-                    </button>
-                  </form>
                 )}
 
               </div>

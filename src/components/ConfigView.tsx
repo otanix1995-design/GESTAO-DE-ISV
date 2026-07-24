@@ -5,7 +5,6 @@
 
 import React, { useState } from 'react';
 import { User, SystemStats } from '../types';
-import { TEST_USERS } from '../mockData';
 import { 
   Sliders, 
   UserCheck, 

@@ -5,13 +5,15 @@
 
 import { Product, Supplier, Promoter, Agency, SupplierHistoryEntry, ImportHistoryEntry, Role, User, SystemStats } from './types';
 
-// Predefined team users for role selection and multi-user login
+// Single official user for Filial 172 Cascavel
 export const TEST_USERS: User[] = [
-  { id: '1', name: 'Danilo (Gerente Filial 172)', role: 'Admin', email: 'danilo.gerencia@atacadao.com.br' },
-  { id: '2', name: 'Juliana Silva (Supervisora Operacional)', role: 'Gestor', email: 'juliana.supervisao@atacadao.com.br' },
-  { id: '3', name: 'Carlos Santos (Auditor de Estoque)', role: 'Gestor', email: 'carlos.auditoria@atacadao.com.br' },
-  { id: '4', name: 'Mariana Costa (Promotora Nestlé / Bauducco)', role: 'Promotor', email: 'mariana.promotora@agenciavista.com.br' },
-  { id: '5', name: 'Roberto Lima (Promotor Ambev / Unilever)', role: 'Promotor', email: 'roberto.promotor@agenciatopo.com.br' }
+  { 
+    id: '1', 
+    name: 'Atacadão Filial 172 Cascavel', 
+    role: 'Admin', 
+    email: 'atacadaocascavel@atacadao.com',
+    password: 'filial@172'
+  }
 ];
 
 /// Initial Agencies
@@ -87,7 +89,7 @@ export function getSavedData() {
     agencies: Array.isArray(agencies) ? agencies : INITIAL_AGENCIES,
     supHistory: Array.isArray(supHistory) ? supHistory : INITIAL_SUPPLIER_HISTORY,
     impHistory: Array.isArray(impHistory) ? impHistory : INITIAL_IMPORT_HISTORY,
-    currentUser: (currentUser && currentUser.id && currentUser.role) ? currentUser : TEST_USERS[0],
+    currentUser: (currentUser && currentUser.email === 'atacadaocascavel@atacadao.com') ? currentUser : TEST_USERS[0],
     lastUpdateTime
   };
 }

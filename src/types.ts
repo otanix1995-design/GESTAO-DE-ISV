@@ -10,6 +10,7 @@ export interface User {
   name: string;
   role: Role;
   email: string;
+  password?: string;
   promoterName?: string; // Predefined promoter association for 'Promotor' role filtering
 }
 
