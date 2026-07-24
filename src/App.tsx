@@ -26,6 +26,7 @@ import {
   saveData, 
   calculateSystemStats,
   normalizeProductCode,
+  deduplicateProducts,
   INITIAL_PRODUCTS,
   INITIAL_SUPPLIERS,
   INITIAL_PROMOTERS,
@@ -53,10 +54,7 @@ export default function App() {
   // Application States
   const [products, setProducts] = useState<Product[]>(() => {
     const rawProds = initialData.products || [];
-    return rawProds.map(p => ({
-      ...p,
-      codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
-    }));
+    return deduplicateProducts(rawProds);
   });
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialData.suppliers || []);
   const [promoters, setPromoters] = useState<Promoter[]>(initialData.promoters || []);
@@ -191,10 +189,7 @@ export default function App() {
         console.log(`[Boot] Selected state source: ${sSource}`, s);
 
         if (Array.isArray(s.products)) {
-          const cleaned = s.products.map((p: any) => ({
-            ...p,
-            codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
-          }));
+          const cleaned = deduplicateProducts(s.products);
           setProducts(cleaned);
         }
         if (Array.isArray(s.suppliers)) {
@@ -225,10 +220,7 @@ export default function App() {
         // LocalStorage fallback
         const s = initialData;
         if (Array.isArray(s.products)) {
-          const cleaned = s.products.map((p: any) => ({
-            ...p,
-            codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
-          }));
+          const cleaned = deduplicateProducts(s.products);
           setProducts(cleaned);
         }
         if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
@@ -338,10 +330,7 @@ export default function App() {
               });
 
               if (combinedProducts.length > 0) {
-                const cleaned = combinedProducts.map((p: any) => ({
-                  ...p,
-                  codigo: p.codigo ? normalizeProductCode(p.codigo) : '0'
-                }));
+                const cleaned = deduplicateProducts(combinedProducts);
                 setProducts(prev => {
                   const isSame = JSON.stringify(prev) === JSON.stringify(cleaned);
                   return isSame ? prev : cleaned;

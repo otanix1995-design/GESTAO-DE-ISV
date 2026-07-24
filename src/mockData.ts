@@ -203,15 +203,80 @@ export function saveData(data: {
 
 /**
  * Normalizes a product code according to the system rules:
- * - Strip leading zeros
- * - Remove hyphen followed by anything (e.g. -110)
+ * - Strip leading zeros (e.g. 00088027 -> 88027)
+ * - Remove hyphen, slash, or space followed by trailing digits or suffix (e.g. 00088027-108 -> 88027)
  */
-export function normalizeProductCode(code: string): string {
-  if (!code) return '';
-  let trimmed = String(code).trim();
-  trimmed = trimmed.replace(/^0+/, '');
-  trimmed = trimmed.split('-')[0];
-  return trimmed || '0';
+export function normalizeProductCode(code: string | number): string {
+  if (code === null || code === undefined) return '0';
+  let str = String(code).trim();
+  if (!str) return '0';
+
+  // Split at first occurrence of hyphen (-), slash (/), or space (\s) to isolate main code
+  let mainPart = str.split(/[\-\/\s]/)[0].trim();
+  
+  // Remove non-alphanumeric characters except letters/digits
+  mainPart = mainPart.replace(/[^\w]/g, '');
+
+  // Strip leading zeros
+  mainPart = mainPart.replace(/^0+/, '');
+
+  return mainPart || '0';
+}
+
+/**
+ * Deduplicates and merges products by their normalized product code.
+ * Ensures data consistency when merging Base Principal and Planilha Diária entries.
+ */
+export function deduplicateProducts(productsList: Product[]): Product[] {
+  if (!Array.isArray(productsList)) return [];
+  
+  const map = new Map<string, Product>();
+
+  for (const rawP of productsList) {
+    if (!rawP) continue;
+    const normCode = normalizeProductCode(rawP.codigo);
+    if (!normCode) continue;
+
+    const existing = map.get(normCode);
+    if (!existing) {
+      map.set(normCode, {
+        ...rawP,
+        codigo: normCode,
+        descricao: rawP.descricao || 'Sem Descrição',
+        embalagem: rawP.embalagem || 'UN',
+        cnpjIndustria: rawP.cnpjIndustria || '',
+        nomeIndustria: rawP.nomeIndustria || 'Indústria Não Informada'
+      });
+    } else {
+      const isRealIndName = (name?: string) => {
+        if (!name) return false;
+        const lower = name.toLowerCase();
+        return !lower.includes('genérica') && !lower.includes('não informada') && !lower.includes('desconhecida') && !lower.includes('não cadastrada');
+      };
+
+      const hasBetterCnpj = rawP.cnpjIndustria && rawP.cnpjIndustria.length >= 14 && (!existing.cnpjIndustria || existing.cnpjIndustria.length < 14);
+      const hasBetterInd = isRealIndName(rawP.nomeIndustria) && !isRealIndName(existing.nomeIndustria);
+      
+      const merged: Product = {
+        ...existing,
+        codigo: normCode,
+        descricao: (rawP.descricao && rawP.descricao !== 'Sem descrição' && (existing.descricao === 'Sem descrição' || !existing.descricao)) ? rawP.descricao : existing.descricao,
+        embalagem: (rawP.embalagem && rawP.embalagem !== 'UN' && existing.embalagem === 'UN') ? rawP.embalagem : existing.embalagem,
+        cnpjIndustria: (hasBetterCnpj || (rawP.cnpjIndustria && !existing.cnpjIndustria)) ? rawP.cnpjIndustria : existing.cnpjIndustria,
+        nomeIndustria: (hasBetterInd || (rawP.nomeIndustria && (!existing.nomeIndustria || existing.nomeIndustria === 'Indústria Não Informada'))) ? rawP.nomeIndustria : existing.nomeIndustria,
+        estoque: Math.max(existing.estoque || 0, rawP.estoque || 0),
+        estoqueFormatado: rawP.estoqueFormatado || existing.estoqueFormatado || '',
+        valorDisponivel: Math.max(existing.valorDisponivel || 0, rawP.valorDisponivel || 0),
+        custoMedio: rawP.custoMedio || existing.custoMedio || 0,
+        semVenda: Math.max(existing.semVenda || 0, rawP.semVenda || 0),
+        idade: Math.max(existing.idade || 0, rawP.idade || 0)
+      };
+
+      map.set(normCode, merged);
+    }
+  }
+
+  return Array.from(map.values());
 }
 
 /**

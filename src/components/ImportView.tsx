@@ -6,7 +6,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product, Supplier, User, ImportHistoryEntry } from '../types';
-import { formatCnpj, normalizeProductCode, parseBrazilianFloat, parseEstoqueString } from '../mockData';
+import { formatCnpj, normalizeProductCode, deduplicateProducts, parseBrazilianFloat, parseEstoqueString } from '../mockData';
 import { 
   FileSpreadsheet, 
   UploadCloud, 
@@ -458,11 +458,19 @@ export default function ImportView({
           const semVenda = Math.max(0, parseInt(cols[iSemVenda]) || 0);
           const idade = Math.max(0, parseInt(cols[iIdade]) || 0);
 
-          const existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo);
+          let existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo || normalizeProductCode(p.codigo) === codigo);
+          
+          if (existingIndex === -1 && descricao && descricao !== 'Sem descrição') {
+            const normDesc = descricao.trim().toLowerCase();
+            existingIndex = updatedProductsList.findIndex(p => p.descricao && p.descricao.trim().toLowerCase() === normDesc);
+          }
+
           if (existingIndex !== -1) {
-            // Update stock and cost rules
-            const updated = {
-              ...updatedProductsList[existingIndex],
+            // Update stock and cost rules while maintaining Base Principal industry association
+            const existing = updatedProductsList[existingIndex];
+            const updated: Product = {
+              ...existing,
+              codigo: normalizeProductCode(existing.codigo) || codigo,
               estoque,
               estoqueFormatado: rawEstoque.trim(),
               valorDisponivel,
@@ -470,14 +478,12 @@ export default function ImportView({
               semVenda,
               idade
             };
-            // Preserve description if user didn't overwrite it
-            if (cols[iDescricao]) updated.descricao = descricao;
-            if (cols[iEmbalagem]) updated.embalagem = embalagem;
+            if (cols[iDescricao] && descricao !== 'Sem descrição') updated.descricao = descricao;
+            if (cols[iEmbalagem] && embalagem !== 'UN') updated.embalagem = embalagem;
             updatedProductsList[existingIndex] = updated;
             updatedCount++;
           } else {
-            // High durability database concept: if not in database, we insert it!
-            // First we identify CNPJ association. We can try to guess it from code or match to general. Let's default to unlinked industry or Ambev
+            // New product in daily sheet not found in Base Principal
             const guessedCnpj = codigo.startsWith('100') ? '02.916.265/0001-60' // JBS
                               : codigo.startsWith('200') ? '03.016.124/0001-50' // Ambev
                               : codigo.startsWith('300') ? '61.068.276/0001-04' // Unilever
@@ -572,16 +578,22 @@ export default function ImportView({
             }
           }
 
-          const existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo);
+          let existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo || normalizeProductCode(p.codigo) === codigo);
+          if (existingIndex === -1 && descricao) {
+            const normDesc = descricao.trim().toLowerCase();
+            existingIndex = updatedProductsList.findIndex(p => p.descricao && p.descricao.trim().toLowerCase() === normDesc);
+          }
+
           if (existingIndex !== -1) {
             // Update mapping to help fix existing incorrect assignments in database
             const existing = updatedProductsList[existingIndex];
             updatedProductsList[existingIndex] = {
               ...existing,
+              codigo: codigo,
               cnpjIndustria: cnpj || existing.cnpjIndustria,
-              nomeIndustria: nomeIndustria !== 'Indústria Não Informada' ? nomeIndustria : existing.nomeIndustria,
+              nomeIndustria: (nomeIndustria && nomeIndustria !== 'Indústria Não Informada') ? nomeIndustria : existing.nomeIndustria,
               descricao: descricao || existing.descricao,
-              embalagem: embalagem !== 'UN' ? embalagem : existing.embalagem
+              embalagem: (embalagem && embalagem !== 'UN') ? embalagem : existing.embalagem
             };
             updatedCount++;
             outputLog.push(`Código [${codigo}] atualizado: Vinculado à indústria CNPJ ${cnpj} (${nomeIndustria}).`);
@@ -616,8 +628,8 @@ export default function ImportView({
         }
       }
 
-      // Save to React State & LocalStorage
-      setProducts(updatedProductsList);
+      // Save to React State & LocalStorage with deduplication
+      setProducts(deduplicateProducts(updatedProductsList));
 
       const timestamp = new Date().toISOString();
       const newImportHistoryEntry: ImportHistoryEntry = {
