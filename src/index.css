@@ -61,14 +61,29 @@
     margin: 0px !important;
   }
 
-  /* Make table rows and headers much more compact on print for extra space */
-  #report-print-pane table th {
-    padding: 4px 6px !important;
-    font-size: 9px !important;
+  /* Force table grid lines (linhas verticais e horizontais) for printable PDF tables */
+  #report-print-pane table,
+  #top20-report-print-area {
+    border-collapse: collapse !important;
+    border: 1px solid #94a3b8 !important;
+    width: 100% !important;
   }
-  #report-print-pane table td {
-    padding: 3px 6px !important;
-    font-size: 9px !important;
+
+  #report-print-pane table th,
+  #report-print-pane table td,
+  #top20-report-print-area th,
+  #top20-report-print-area td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 4px 6px !important;
+    font-size: 8.5px !important;
+  }
+
+  #report-print-pane table th,
+  #top20-report-print-area th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
   }
 
   /* Prevent page breaks inside table rows */

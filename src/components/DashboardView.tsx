@@ -51,7 +51,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
   const [modalSearch, setModalSearch] = useState('');
   const [copiedText, setCopiedText] = useState(false);
   const [visibleCount, setVisibleCount] = useState(100);
-  const [abastecerMinDias, setAbastecerMinDias] = useState<number>(5);
+  const [abastecerMinDias, setAbastecerMinDias] = useState<number>(0);
+  const [filterMinIdade, setFilterMinIdade] = useState<number>(0);
 
   // Automatically reset visible limit when card or search query changes to keep DOM rendering instant
   useEffect(() => {
@@ -148,7 +149,13 @@ export default function DashboardView({ products, suppliers, promoters, agencies
       const est = p.product?.estoque ?? p.estoqueTotal ?? 0;
       if (est <= 0) return false;
       const sv = p.product?.semVenda ?? 0;
-      if (sv < abastecerMinDias) return false;
+      if (abastecerMinDias > 0 && sv <= abastecerMinDias) return false;
+
+      if (filterMinIdade > 0) {
+        const age = p.product?.idade ?? 0;
+        if (age <= filterMinIdade) return false;
+      }
+
       if (selectedCard === 'abastecer' && modalSearch) {
         const s = modalSearch.toLowerCase();
         return (p.product?.codigo || '').toLowerCase().includes(s) ||
@@ -162,7 +169,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
       const valB = typeof b.valorEstoque === 'number' && !isNaN(b.valorEstoque) ? b.valorEstoque : (b.product?.valorDisponivel || 0);
       return valB - valA;
     });
-  }, [filteredProducts, selectedCard, modalSearch, abastecerMinDias]);
+  }, [filteredProducts, selectedCard, modalSearch, abastecerMinDias, filterMinIdade]);
 
   const handleCopyTop20 = () => {
     let tsv = "Rank\tCódigo\tDescrição\tSetor\tEstoque\tCusto Médio\tValor Estoque\n";
@@ -1227,7 +1234,12 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                   const est = p.product?.estoque ?? p.estoqueTotal ?? 0;
                   if (est <= 0) return false;
                   const sv = p.product?.semVenda ?? 0;
-                  if (sv < abastecerMinDias) return false;
+                  if (abastecerMinDias > 0 && sv <= abastecerMinDias) return false;
+
+                  if (filterMinIdade > 0) {
+                    const age = p.product?.idade ?? 0;
+                    if (age <= filterMinIdade) return false;
+                  }
 
                   const s = modalSearch.toLowerCase();
                   if (!s) return true;
@@ -1246,22 +1258,43 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                   <div className="space-y-4">
                     {/* Control & Filter Header Bar */}
                     <div className="bg-orange-50/70 border border-orange-200/60 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-extrabold text-orange-950 uppercase tracking-wide text-[11px] font-sans">Filtro Dias Sem Venda:</span>
-                        <div className="flex items-center gap-1 bg-white border border-orange-200/80 rounded-xl p-1 shadow-2xs">
-                          {[5, 10, 15, 0].map((d) => (
-                            <button
-                              key={d}
-                              onClick={() => setAbastecerMinDias(d)}
-                              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                abastecerMinDias === d
-                                  ? 'bg-[#F58220] text-white shadow-xs'
-                                  : 'text-gray-600 hover:bg-orange-50 hover:text-orange-900'
-                              }`}
-                            >
-                              {d === 0 ? 'Todos (≥0)' : `≥ ${d} dias`}
-                            </button>
-                          ))}
+                      <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-orange-950 uppercase tracking-wide text-[10px] font-sans">Dias Sem Venda:</span>
+                          <div className="flex flex-wrap items-center gap-1 bg-white border border-orange-200/80 rounded-xl p-1 shadow-2xs">
+                            {[3, 4, 5, 6, 7, 15, 0].map((d) => (
+                              <button
+                                key={d}
+                                onClick={() => setAbastecerMinDias(d)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                  abastecerMinDias === d
+                                    ? 'bg-[#F58220] text-white shadow-xs'
+                                    : 'text-gray-600 hover:bg-orange-50 hover:text-orange-900'
+                                }`}
+                              >
+                                {d === 0 ? 'Todos' : `> ${d}d`}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-orange-950 uppercase tracking-wide text-[10px] font-sans">Idade:</span>
+                          <div className="flex items-center gap-1 bg-white border border-orange-200/80 rounded-xl p-1 shadow-2xs">
+                            {[150, 0].map((age) => (
+                              <button
+                                key={age}
+                                onClick={() => setFilterMinIdade(age)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                  filterMinIdade === age
+                                    ? 'bg-[#F58220] text-white shadow-xs'
+                                    : 'text-gray-600 hover:bg-orange-50 hover:text-orange-900'
+                                }`}
+                              >
+                                {age === 0 ? 'Todas' : `> ${age}d`}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
 
@@ -1465,20 +1498,22 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                       </p>
                     </div>
 
-                    <table className="w-full text-left border-collapse" id="top20-report-print-area">
+                    <table className="w-full text-left border-collapse border border-gray-300 text-xs" id="top20-report-print-area">
                       <thead>
-                        <tr className="border-b border-gray-200 text-gray-500 text-[10px] font-extrabold uppercase tracking-widest font-sans">
-                          <th className="pb-3 pr-2 text-center w-12">Rank</th>
-                          <th className="pb-3 pr-2 w-20">Código</th>
-                          <th className="pb-3 pr-4">Descrição do SKU</th>
-                          <th className="pb-3 pr-4 w-32">Setor</th>
-                          <th className="pb-3 pr-4">Indústria / Fabricante</th>
-                          <th className="pb-3 pr-2 text-right w-24">Qtd. Estoque</th>
-                          {!isPromotor && <th className="pb-3 pr-2 text-right w-24">Custo Médio</th>}
-                          {!isPromotor && <th className="pb-3 text-right w-32">Valor Total Estoque</th>}
+                        <tr className="bg-gray-100 border-b border-gray-300 text-gray-700 text-[10px] font-extrabold uppercase tracking-widest font-sans">
+                          <th className="p-2 border border-gray-300 text-center w-10">Rank</th>
+                          <th className="p-2 border border-gray-300 w-20">Código</th>
+                          <th className="p-2 border border-gray-300">Descrição do SKU</th>
+                          <th className="p-2 border border-gray-300 w-24">Setor</th>
+                          <th className="p-2 border border-gray-300">Indústria / Fabricante</th>
+                          <th className="p-2 border border-gray-300 font-bold">Agência</th>
+                          <th className="p-2 border border-gray-300 font-bold">Promotor Responsável</th>
+                          <th className="p-2 border border-gray-300 text-right w-20">Qtd. Estoque</th>
+                          {!isPromotor && <th className="p-2 border border-gray-300 text-right w-24">Custo Médio</th>}
+                          {!isPromotor && <th className="p-2 border border-gray-300 text-right w-28">Valor Total Estoque</th>}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100 text-xs">
+                      <tbody className="text-xs">
                         {top20ValueProducts.map((p, idx) => {
                           const desc = p.product?.descricao || '';
                           let sectorLabel = 'LOJA';
@@ -1493,19 +1528,21 @@ export default function DashboardView({ products, suppliers, promoters, agencies
 
                           return (
                             <tr key={p.product?.codigo} className="hover:bg-gray-50/70 transition-colors">
-                              <td className="py-3.5 pr-2 text-center font-mono text-gray-500 font-extrabold text-xs">{idx + 1}</td>
-                              <td className="py-3.5 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                              <td className="py-3.5 pr-4">{formatProductDesc(desc)}</td>
-                              <td className="py-3.5 pr-4">
+                              <td className="p-2 border border-gray-300 text-center font-mono text-gray-500 font-extrabold text-xs">{idx + 1}</td>
+                              <td className="p-2 border border-gray-300 font-mono text-gray-600 font-semibold">{p.product?.codigo}</td>
+                              <td className="p-2 border border-gray-300 font-bold text-gray-900">{formatProductDesc(desc)}</td>
+                              <td className="p-2 border border-gray-300">
                                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${sectorBadgeColor}`}>
                                   {sectorLabel}
                                 </span>
                               </td>
-                              <td className="py-3.5 pr-4 text-gray-600 truncate max-w-[150px]">{p.nomeIndustria}</td>
-                              <td className="py-3.5 pr-2 text-right font-mono font-semibold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
-                              {!isPromotor && <td className="py-3.5 pr-2 text-right font-mono text-gray-600 font-medium">R$ {p.product?.custoMedio?.toFixed(2)}</td>}
+                              <td className="p-2 border border-gray-300 text-gray-700 font-medium truncate max-w-[130px]">{p.nomeIndustria}</td>
+                              <td className="p-2 border border-gray-300 font-bold text-gray-700 truncate max-w-[110px]">{p.agencia}</td>
+                              <td className="p-2 border border-gray-300 font-bold text-[#F58220] truncate max-w-[120px]">{p.promotor}</td>
+                              <td className="p-2 border border-gray-300 text-right font-mono font-semibold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
+                              {!isPromotor && <td className="p-2 border border-gray-300 text-right font-mono text-gray-600 font-medium">R$ {p.product?.custoMedio?.toFixed(2)}</td>}
                               {!isPromotor && (
-                                <td className="py-3.5 text-right font-mono font-black text-blue-900">
+                                <td className="p-2 border border-gray-300 text-right font-mono font-black text-blue-900">
                                   R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </td>
                               )}
@@ -1603,20 +1640,22 @@ export default function DashboardView({ products, suppliers, promoters, agencies
         </div>
 
         {/* DATA GRID IN TABLE LAYOUT */}
-        <div className="overflow-x-auto border border-gray-200 rounded-2xl">
-          <table className="w-full text-left border-collapse text-xs">
+        <div className="overflow-x-auto border border-gray-300 rounded-2xl">
+          <table className="w-full text-left border-collapse border border-gray-300 text-xs">
             <thead>
-              <tr className="bg-gray-100 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px] tracking-wide select-none">
-                <th className="p-3">Código</th>
-                <th className="p-3">Descrição</th>
-                <th className="p-3">Setor</th>
-                <th className="p-3 text-center">Estoque</th>
-                <th className="p-3 text-center font-mono">Dias sem venda</th>
-                <th className="p-3 text-right">Valor Disponível</th>
-                <th className="p-3 text-right">Promotor Responsável</th>
+              <tr className="bg-gray-100 text-gray-700 font-extrabold uppercase text-[10px] tracking-wide select-none">
+                <th className="p-2.5 border border-gray-300">Código</th>
+                <th className="p-2.5 border border-gray-300">Descrição</th>
+                <th className="p-2.5 border border-gray-300">Setor</th>
+                <th className="p-2.5 border border-gray-300 font-bold">Indústria / Fabricante</th>
+                <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
+                <th className="p-2.5 border border-gray-300 text-center">Estoque</th>
+                <th className="p-2.5 border border-gray-300 text-center font-mono">Dias sem venda</th>
+                <th className="p-2.5 border border-gray-300 text-right">Valor Disponível</th>
+                <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-150 text-xs">
+            <tbody className="text-xs font-sans">
               {printProducts.map(p => {
                 const desc = p.product?.descricao || '';
                 let sectorLabel = 'LOJA';
@@ -1628,15 +1667,17 @@ export default function DashboardView({ products, suppliers, promoters, agencies
 
                 return (
                   <tr key={p.product?.codigo} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="p-3 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                    <td className="p-3 font-semibold text-gray-900">{formatProductDesc(desc)}</td>
-                    <td className="p-3 text-gray-600">{sectorLabel}</td>
-                    <td className="p-3 text-center font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
-                    <td className="p-3 text-center font-mono text-gray-500">{p.product?.semVenda} dias</td>
-                    <td className="p-3 text-right text-[#F58220] font-mono font-semibold">
+                    <td className="p-2 border border-gray-300 font-mono text-gray-600 font-semibold">{p.product?.codigo}</td>
+                    <td className="p-2 border border-gray-300 font-bold text-gray-900">{formatProductDesc(desc)}</td>
+                    <td className="p-2 border border-gray-300 text-gray-700 font-medium">{sectorLabel}</td>
+                    <td className="p-2 border border-gray-300 text-gray-700 font-medium">{p.nomeIndustria}</td>
+                    <td className="p-2 border border-gray-300 font-bold text-gray-800">{p.agencia}</td>
+                    <td className="p-2 border border-gray-300 text-center font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
+                    <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{p.product?.semVenda} dias</td>
+                    <td className="p-2 border border-gray-300 text-right text-[#F58220] font-mono font-bold">
                       R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td className="p-3 text-right font-medium text-gray-700">{p.promotor}</td>
+                    <td className="p-2 border border-gray-300 font-bold text-[#F58220]">{p.promotor}</td>
                   </tr>
                 );
               })}

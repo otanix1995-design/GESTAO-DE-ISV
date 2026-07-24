@@ -59,6 +59,8 @@ export default function RelatoriosView({
   const [reportAgency, setReportAgency] = useState('todos');
   const [reportStatus, setReportStatus] = useState('todos');
   const [filterStock, setFilterStock] = useState<'todos' | 'zerado' | 'positivo'>('todos');
+  const [filterSemVenda, setFilterSemVenda] = useState<string>('todos');
+  const [filterIdade, setFilterIdade] = useState<string>('todos');
   const [exportSuccessMessage, setExportSuccessMessage] = useState('');
   
   // Sorting state: 'none', 'estoqueDesc' (estoque maior para o menor), 'valorDesc' (valor do estoque maior para menor), 'semVendaDesc', 'codigo'
@@ -194,6 +196,22 @@ export default function RelatoriosView({
       result = result.filter(r => r.estoqueTotal > 0);
     }
 
+    // Apply Dias Sem Venda Filter (> 3, > 4, > 5, > 6, > 7, > 15)
+    if (filterSemVenda !== 'todos') {
+      const minSV = parseInt(filterSemVenda, 10);
+      if (!isNaN(minSV)) {
+        result = result.filter(r => (r.product.semVenda || 0) > minSV);
+      }
+    }
+
+    // Apply Idade Filter (> 150)
+    if (filterIdade !== 'todos') {
+      const minAge = parseInt(filterIdade, 10);
+      if (!isNaN(minAge)) {
+        result = result.filter(r => (r.product.idade || 0) > minAge);
+      }
+    }
+
     // Apply Sorting Options
     if (sortBy === 'estoqueDesc') {
       result.sort((a, b) => b.estoqueTotal - a.estoqueTotal);
@@ -206,7 +224,7 @@ export default function RelatoriosView({
     }
 
     return result;
-  }, [activeReport, productsDerived, reportPromoter, reportIndustry, reportAgency, reportStatus, filterStock, sortBy, isPromotor, currentUser.promoterName]);
+  }, [activeReport, productsDerived, reportPromoter, reportIndustry, reportAgency, reportStatus, filterStock, filterSemVenda, filterIdade, sortBy, isPromotor, currentUser.promoterName]);
 
   // Aggregate Metrics for Active Report Layout
   const reportSummary = useMemo(() => {
@@ -238,8 +256,8 @@ export default function RelatoriosView({
 
     if (activeReport === 'isv') {
       headers = hideFinancialValues
-        ? ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'IDADE (DIAS)', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO']
-        : ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'IDADE (DIAS)', 'VALOR ESTOQUE (R$)', 'RAZÃO SOCIAL', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO'];
+        ? ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'IDADE (DIAS)', 'RAZÃO SOCIAL', 'AGÊNCIA', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO']
+        : ['CÓDIGO', 'DESCRIÇÃO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'DIAS SEM VENDA', 'IDADE (DIAS)', 'VALOR ESTOQUE (R$)', 'RAZÃO SOCIAL', 'AGÊNCIA', 'PROMOTOR RESPONSÁVEL', 'CLASSIFICAÇÃO'];
       rows = reportData.map(d => hideFinancialValues
         ? [
             d.product.codigo,
@@ -249,6 +267,7 @@ export default function RelatoriosView({
             d.product.semVenda.toString(),
             (d.product.idade || 0).toString(),
             d.nomeIndustria,
+            d.agencia,
             d.promotor,
             d.classificacao
           ]
@@ -261,12 +280,13 @@ export default function RelatoriosView({
             (d.product.idade || 0).toString(),
             d.valorEstoque.toFixed(2),
             d.nomeIndustria,
+            d.agencia,
             d.promotor,
             d.classificacao
           ]
       );
     } else if (activeReport === 'promotor') {
-      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'SEM VENDA (DIAS)', 'IDADE (DIAS)', 'STATUS'];
+      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'SEM VENDA (DIAS)', 'IDADE (DIAS)', 'AGÊNCIA', 'PROMOTOR RESPONSÁVEL', 'STATUS'];
       rows = reportData.map(d => [
         d.product.codigo,
         d.product.descricao,
@@ -274,35 +294,39 @@ export default function RelatoriosView({
         d.product.estoqueFormatado || d.estoqueTotal.toString(),
         d.product.semVenda.toString(),
         (d.product.idade || 0).toString(),
+        d.agencia,
+        d.promotor,
         d.classificacao
       ]);
     } else if (activeReport === 'industria') {
-      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'IDADE (DIAS)', 'STATUS', 'PROMOTOR', 'AGÊNCIA'];
+      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'IDADE (DIAS)', 'INDÚSTRIA', 'AGÊNCIA', 'PROMOTOR RESPONSÁVEL', 'STATUS'];
       rows = reportData.map(d => [
         d.product.codigo,
         d.product.descricao,
         d.product.embalagem,
         d.product.estoqueFormatado || d.estoqueTotal.toString(),
         (d.product.idade || 0).toString(),
-        d.classificacao,
+        d.nomeIndustria,
+        d.agencia,
         d.promotor,
-        d.agencia
+        d.classificacao
       ]);
     } else if (activeReport === 'agencia') {
-      headers = ['AGÊNCIA', 'INDÚSTRIA', 'PROMOTOR', 'DIAS ATENDIMENTO', 'CÓDIGO PRODUTO', 'DESCRIÇÃO', 'STATUS'];
+      headers = ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'INDÚSTRIA', 'AGÊNCIA', 'PROMOTOR RELACIONADO', 'DIAS ATENDIMENTO', 'STATUS'];
       rows = reportData.map(d => [
-        d.agencia,
-        d.nomeIndustria,
-        d.promotor,
-        d.diasAtendimento.join(' | '),
         d.product.codigo,
         d.product.descricao,
+        d.product.embalagem,
+        d.nomeIndustria,
+        d.agencia,
+        d.promotor,
+        d.diasAtendimento.join(' | '),
         d.classificacao
       ]);
     } else if (activeReport === 'gerencial') {
       headers = hideFinancialValues
-        ? ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'IDADE (DIAS)', 'STATUS', 'PROMOTOR']
-        : ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'IDADE (DIAS)', 'CUSTO MÉDIO (R$)', 'VALOR ESTOQUE (R$)', 'STATUS', 'PROMOTOR'];
+        ? ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'IDADE (DIAS)', 'AGÊNCIA', 'PROMOTOR RESPONSÁVEL', 'STATUS']
+        : ['CÓDIGO', 'PRODUTO', 'EMBALAGEM', 'ESTOQUE TOTAL', 'IDADE (DIAS)', 'CUSTO MÉDIO (R$)', 'VALOR ESTOQUE (R$)', 'AGÊNCIA', 'PROMOTOR RESPONSÁVEL', 'STATUS'];
       rows = reportData.map(d => hideFinancialValues
         ? [
             d.product.codigo,
@@ -310,8 +334,9 @@ export default function RelatoriosView({
             d.product.embalagem,
             d.product.estoqueFormatado || d.estoqueTotal.toString(),
             (d.product.idade || 0).toString(),
-            d.classificacao,
-            d.promotor
+            d.agencia,
+            d.promotor,
+            d.classificacao
           ]
         : [
             d.product.codigo,
@@ -321,8 +346,9 @@ export default function RelatoriosView({
             (d.product.idade || 0).toString(),
             d.product.custoMedio.toFixed(2),
             d.valorEstoque.toFixed(2),
-            d.classificacao,
-            d.promotor
+            d.agencia,
+            d.promotor,
+            d.classificacao
           ]
       );
     }
@@ -548,6 +574,37 @@ export default function RelatoriosView({
             </select>
           </div>
 
+          {/* Days Without Sales Filter Option */}
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">DIAS SEM VENDA</label>
+            <select
+              value={filterSemVenda}
+              onChange={(e) => setFilterSemVenda(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#F58220] text-gray-700 font-sans"
+            >
+              <option value="todos">Todos os Dias</option>
+              <option value="3">Mais de 3 dias sem venda (&gt; 3d)</option>
+              <option value="4">Mais de 4 dias sem venda (&gt; 4d)</option>
+              <option value="5">Mais de 5 dias sem venda (&gt; 5d)</option>
+              <option value="6">Mais de 6 dias sem venda (&gt; 6d)</option>
+              <option value="7">Mais de 7 dias sem venda (&gt; 7d)</option>
+              <option value="15">Mais de 15 dias sem venda (&gt; 15d)</option>
+            </select>
+          </div>
+
+          {/* Product Age Filter Option */}
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">IDADE DO PRODUTO</label>
+            <select
+              value={filterIdade}
+              onChange={(e) => setFilterIdade(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-50 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#F58220] text-gray-700 font-sans"
+            >
+              <option value="todos">Todas as idades</option>
+              <option value="150">Mais de 150 dias de idade (&gt; 150d)</option>
+            </select>
+          </div>
+
           {/* Sorting Option */}
           <div>
             <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1 font-sans">ORDENAÇÃO OPERACIONAL</label>
@@ -565,7 +622,7 @@ export default function RelatoriosView({
           </div>
 
           {/* Export and Print Action Buttons */}
-          <div className="col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-4 xl:col-span-7 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pt-4 border-t border-gray-100 mt-2">
+          <div className="col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-4 xl:col-span-7 2xl:col-span-9 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pt-4 border-t border-gray-100 mt-2">
             {/* Privacy toggle on the left */}
             <div className="flex items-center gap-2.5 bg-amber-50/50 border border-amber-200/50 px-4 py-2.5 rounded-xl self-start md:self-auto">
               <input
@@ -652,12 +709,13 @@ export default function RelatoriosView({
             </div>
             <div className="text-right border-l pl-4 print:pl-3">
               <span className="text-[9px] print:text-[7px] font-bold text-gray-400 uppercase tracking-widest block">Filtros Ativos</span>
-              <span className="font-bold text-gray-700 leading-none">
-                {activeReport === 'isv' ? 'Filtro ISV Completo'
-                 : activeReport === 'promotor' ? `Promotor: ${reportPromoter}`
-                 : activeReport === 'industria' ? `Fabricante CNPJ Match`
-                 : activeReport === 'agencia' ? `Agência: ${reportAgency}`
-                 : 'Multifiltro Master'}
+              <span className="font-bold text-gray-700 leading-none block">
+                {[
+                  activeReport === 'isv' ? 'Filtro ISV' : activeReport === 'promotor' ? `Promotor: ${reportPromoter}` : activeReport === 'industria' ? 'Fabricante' : activeReport === 'agencia' ? `Agência: ${reportAgency}` : 'Gerencial',
+                  filterStock !== 'todos' ? `Estoque: ${filterStock}` : null,
+                  filterSemVenda !== 'todos' ? `Sem Venda >${filterSemVenda}d` : null,
+                  filterIdade !== 'todos' ? `Idade >${filterIdade}d` : null
+                ].filter(Boolean).join(' | ')}
               </span>
             </div>
           </div>
@@ -689,98 +747,101 @@ export default function RelatoriosView({
         </div>
 
         {/* DATA GRID IN TABLE LAYOUT */}
-        <div className="overflow-x-auto border border-gray-200 rounded-2xl">
-          <table className="w-full text-left border-collapse text-xs">
+        <div className="overflow-x-auto border border-gray-300 rounded-2xl">
+          <table className="w-full text-left border-collapse text-xs border border-gray-300">
             <thead>
-              <tr className="bg-gray-100 border-b border-gray-200 text-gray-500 font-bold uppercase text-[10px] tracking-wide select-none">
-                <th className="p-3 cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('codigo')}>
+              <tr className="bg-gray-100 text-gray-700 font-extrabold uppercase text-[10px] tracking-wide select-none">
+                <th className="p-2.5 border border-gray-300 cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleToggleSort('codigo')}>
                   <div className="flex items-center gap-1">
                     Cód. {sortBy === 'codigo' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
                   </div>
                 </th>
-                <th className="p-3">Descrição Mercadoria</th>
-                <th className="p-3">Emb.</th>
+                <th className="p-2.5 border border-gray-300">Descrição Mercadoria</th>
+                <th className="p-2.5 border border-gray-300 text-center">Emb.</th>
                 
                 {/* ISV Detailed Columns */}
                 {activeReport === 'isv' && (
                   <>
-                    <th className="p-3 text-center cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('estoqueDesc')}>
+                    <th className="p-2.5 border border-gray-300 text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleToggleSort('estoqueDesc')}>
                       <div className="flex items-center justify-center gap-1">
                         Estoque Total {sortBy === 'estoqueDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
                       </div>
                     </th>
-                    <th className="p-3 text-center cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('semVendaDesc')}>
+                    <th className="p-2.5 border border-gray-300 text-center cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleToggleSort('semVendaDesc')}>
                       <div className="flex items-center justify-center gap-1">
                         Dias Sem Venda {sortBy === 'semVendaDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
                       </div>
                     </th>
-                    <th className="p-3 text-center">
+                    <th className="p-2.5 border border-gray-300 text-center">
                       Idade (Dias)
                     </th>
                     {!hideFinancialValues && (
-                      <th className="p-3 text-right cursor-pointer hover:bg-gray-150 transition-colors" onClick={() => handleToggleSort('valorDesc')}>
+                      <th className="p-2.5 border border-gray-300 text-right cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => handleToggleSort('valorDesc')}>
                         <div className="flex items-center justify-end gap-1">
                           Valor Estoque {sortBy === 'valorDesc' && <ArrowUpDown className="w-3.5 h-3.5 text-[#F58220]" />}
                         </div>
                       </th>
                     )}
-                    <th className="p-3">Razão Social (Indústria)</th>
-                    <th className="p-3 font-bold">Promotor Responsável</th>
-                    <th className="p-3 text-right font-bold">Classificação</th>
+                    <th className="p-2.5 border border-gray-300">Razão Social (Indústria)</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                    <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
                 )}
 
                 {/* Specific layouts according to other sub-report constraints */}
                 {activeReport === 'promotor' && (
                   <>
-                    <th className="p-3 text-center">Estoque Total</th>
-                    <th className="p-3 text-center">Inativo (SemVenda)</th>
-                    <th className="p-3 text-center">Idade (Dias)</th>
-                    <th className="p-3 text-right">Classificação</th>
+                    <th className="p-2.5 border border-gray-300 text-center">Estoque Total</th>
+                    <th className="p-2.5 border border-gray-300 text-center">Inativo (SemVenda)</th>
+                    <th className="p-2.5 border border-gray-300 text-center">Idade (Dias)</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                    <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
                 )}
 
                 {activeReport === 'industria' && (
                   <>
-                    <th className="p-3 text-center">Estoque Total</th>
-                    <th className="p-3 text-center">Idade (Dias)</th>
-                    <th className="p-3">Promotor Autorizado</th>
-                    <th className="p-3 text-right font-bold">Classificação</th>
+                    <th className="p-2.5 border border-gray-300 text-center">Estoque Total</th>
+                    <th className="p-2.5 border border-gray-300 text-center">Idade (Dias)</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Indústria / Fabricante</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Promotor Autorizado</th>
+                    <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
                 )}
 
                 {activeReport === 'agencia' && (
                   <>
-                    <th className="p-3">Indústria Fabricante</th>
-                    <th className="p-3">Promotor Relacionado</th>
-                    <th className="p-3">Dias Visita</th>
-                    <th className="p-3 text-right">Classificação</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Indústria Fabricante</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Promotor Relacionado</th>
+                    <th className="p-2.5 border border-gray-300">Dias Visita</th>
+                    <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
                 )}
 
                 {activeReport === 'gerencial' && (
                   <>
-                    <th className="p-3 text-center">Estoque Total</th>
-                    <th className="p-3 text-center">Idade (Dias)</th>
-                    {!hideFinancialValues && <th className="p-3 text-right">Custo Unit</th>}
-                    {!hideFinancialValues && <th className="p-3 text-right">Valor Ativo</th>}
-                    <th className="p-3">Promotor</th>
-                    <th className="p-3 text-right font-bold">Classificação</th>
+                    <th className="p-2.5 border border-gray-300 text-center">Estoque Total</th>
+                    <th className="p-2.5 border border-gray-300 text-center">Idade (Dias)</th>
+                    {!hideFinancialValues && <th className="p-2.5 border border-gray-300 text-right">Custo Unit</th>}
+                    {!hideFinancialValues && <th className="p-2.5 border border-gray-300 text-right">Valor Ativo</th>}
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                    <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
                 )}
 
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-[11px] font-sans">
+            <tbody className="text-[11px] font-sans">
               {reportData.length === 0 ? (
                 <tr>
                   <td 
-                    colSpan={
-                      activeReport === 'isv' 
-                        ? (hideFinancialValues ? 9 : 10) 
-                        : (activeReport === 'gerencial' ? (hideFinancialValues ? 7 : 9) : 8)
-                    } 
-                    className="text-center py-10 text-gray-400 font-bold"
+                    colSpan={12} 
+                    className="text-center py-10 text-gray-400 font-bold border border-gray-300"
                   >
                     Nenhum registro localizado sob os critérios de filtros indicados. Certifique-se de cadastrar/importar os dados na Base Principal e configurar os Fornecedores.
                   </td>
@@ -789,30 +850,33 @@ export default function RelatoriosView({
                 reportData.map((row) => {
                   return (
                     <tr key={row.product.codigo} className="hover:bg-gray-50/40 transition-colors">
-                      <td className="p-3 font-mono font-bold text-gray-900">{row.product.codigo}</td>
-                      <td className="p-3 font-bold text-gray-800 tracking-tight max-w-[200px] truncate" title={row.product.descricao}>
+                      <td className="p-2 border border-gray-300 font-mono font-bold text-gray-900">{row.product.codigo}</td>
+                      <td className="p-2 border border-gray-300 font-bold text-gray-800 tracking-tight max-w-[200px] truncate" title={row.product.descricao}>
                         {row.product.descricao}
                       </td>
-                      <td className="p-3 text-gray-500 font-mono font-medium">{row.product.embalagem}</td>
+                      <td className="p-2 border border-gray-300 text-center text-gray-600 font-mono font-medium">{row.product.embalagem}</td>
                       
                       {/* ISV Detailed columns render */}
                       {activeReport === 'isv' && (
                         <>
-                          <td className="p-3 text-center font-mono font-bold text-gray-700 bg-gray-50/20">{row.product.estoqueFormatado || row.estoqueTotal}</td>
-                          <td className="p-3 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
-                          <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
+                          <td className="p-2 border border-gray-300 text-center font-mono font-bold text-gray-700 bg-gray-50/20">{row.product.estoqueFormatado || row.estoqueTotal}</td>
+                          <td className="p-2 border border-gray-300 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
+                          <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           {!hideFinancialValues && (
-                            <td className="p-3 text-right font-mono font-black text-gray-900">
+                            <td className="p-2 border border-gray-300 text-right font-mono font-black text-gray-900">
                               R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </td>
                           )}
-                          <td className="p-3 font-semibold text-gray-700 max-w-[150px] truncate" title={row.nomeIndustria}>
+                          <td className="p-2 border border-gray-300 font-semibold text-gray-700 max-w-[150px] truncate" title={row.nomeIndustria}>
                             {row.nomeIndustria}
                           </td>
-                          <td className="p-3 font-bold text-[#F58220] max-w-[120px] truncate" title={row.promotor}>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700 max-w-[120px] truncate" title={row.agencia}>
+                            {row.agencia}
+                          </td>
+                          <td className="p-2 border border-gray-300 font-bold text-[#F58220] max-w-[120px] truncate" title={row.promotor}>
                             {row.promotor}
                           </td>
-                          <td className="p-3 text-right">
+                          <td className="p-2 border border-gray-300 text-right">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
                               row.classificacao === 'Ruptura' ? 'bg-red-100 text-red-800' :
                               row.classificacao === 'Abastecer' ? 'bg-orange-100 text-orange-800' :
@@ -829,10 +893,12 @@ export default function RelatoriosView({
                       {/* Promoter Sub-columns */}
                       {activeReport === 'promotor' && (
                         <>
-                          <td className="p-3 text-center font-mono font-black text-gray-900 bg-gray-50/50">{row.product.estoqueFormatado || row.estoqueTotal}</td>
-                          <td className="p-3 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
-                          <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
-                          <td className="p-3 text-right">
+                          <td className="p-2 border border-gray-300 text-center font-mono font-black text-gray-900 bg-gray-50/50">{row.product.estoqueFormatado || row.estoqueTotal}</td>
+                          <td className="p-2 border border-gray-300 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
+                          <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700 max-w-[120px] truncate" title={row.agencia}>{row.agencia}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-[#F58220] max-w-[120px] truncate" title={row.promotor}>{row.promotor}</td>
+                          <td className="p-2 border border-gray-300 text-right">
                             <span className="font-extrabold text-[10px] uppercase text-gray-700">{row.classificacao}</span>
                           </td>
                         </>
@@ -841,32 +907,36 @@ export default function RelatoriosView({
                       {/* Industry Sub-columns */}
                       {activeReport === 'industria' && (
                         <>
-                          <td className="p-3 text-center font-mono font-bold text-gray-800">{row.product.estoqueFormatado || row.estoqueTotal}</td>
-                          <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
-                          <td className="p-3 font-extrabold text-gray-700">{row.promotor}</td>
-                          <td className="p-3 text-right font-black uppercase text-[9px]">{row.classificacao}</td>
+                          <td className="p-2 border border-gray-300 text-center font-mono font-bold text-gray-800">{row.product.estoqueFormatado || row.estoqueTotal}</td>
+                          <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700">{row.nomeIndustria}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700">{row.agencia}</td>
+                          <td className="p-2 border border-gray-300 font-extrabold text-[#F58220]">{row.promotor}</td>
+                          <td className="p-2 border border-gray-300 text-right font-black uppercase text-[9px]">{row.classificacao}</td>
                         </>
                       )}
 
                       {/* Agency Sub-columns */}
                       {activeReport === 'agencia' && (
                         <>
-                          <td className="p-3 font-bold text-gray-700 max-w-[150px] truncate">{row.nomeIndustria}</td>
-                          <td className="p-3 font-extrabold text-[#2F2F2F]">{row.promotor}</td>
-                          <td className="p-3 font-bold text-[#F58220] tracking-tight">{row.diasAtendimento.join(', ')}</td>
-                          <td className="p-3 text-right font-black text-[9px]">{row.classificacao}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700 max-w-[150px] truncate">{row.nomeIndustria}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-800">{row.agencia}</td>
+                          <td className="p-2 border border-gray-300 font-extrabold text-[#2F2F2F]">{row.promotor}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-[#F58220] tracking-tight">{row.diasAtendimento.join(', ')}</td>
+                          <td className="p-2 border border-gray-300 text-right font-black text-[9px]">{row.classificacao}</td>
                         </>
                       )}
 
                       {/* Gerencial layout with average cost and valor total */}
                       {activeReport === 'gerencial' && (
                         <>
-                          <td className="p-3 text-center font-mono text-gray-600">{row.product.estoqueFormatado || row.estoqueTotal}</td>
-                          <td className="p-3 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
-                          {!hideFinancialValues && <td className="p-3 text-right font-mono text-gray-600">R$ {row.product.custoMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
-                          {!hideFinancialValues && <td className="p-3 text-right font-mono font-black text-gray-900 bg-orange-50/20">R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
-                          <td className="p-3 font-bold text-gray-700">{row.promotor}</td>
-                          <td className="p-3 text-right font-black uppercase text-[9px]">{row.classificacao}</td>
+                          <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{row.product.estoqueFormatado || row.estoqueTotal}</td>
+                          <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
+                          {!hideFinancialValues && <td className="p-2 border border-gray-300 text-right font-mono text-gray-600">R$ {row.product.custoMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
+                          {!hideFinancialValues && <td className="p-2 border border-gray-300 text-right font-mono font-black text-gray-900 bg-orange-50/20">R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700">{row.agencia}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-[#F58220]">{row.promotor}</td>
+                          <td className="p-2 border border-gray-300 text-right font-black uppercase text-[9px]">{row.classificacao}</td>
                         </>
                       )}
 
