@@ -18,7 +18,10 @@ import {
   Copy,
   PlusCircle,
   FileCheck2,
-  Trash2
+  Trash2,
+  RotateCcw,
+  RefreshCw,
+  Database
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -240,6 +243,7 @@ interface ImportViewProps {
   impHistory: ImportHistoryEntry[];
   setImpHistory: (history: ImportHistoryEntry[]) => void;
   onUpdateStats: (newTimestamp: string) => void;
+  onResetDatabase?: () => void;
 }
 
 export default function ImportView({ 
@@ -250,7 +254,8 @@ export default function ImportView({
   currentUser, 
   impHistory, 
   setImpHistory, 
-  onUpdateStats
+  onUpdateStats,
+  onResetDatabase
 }: ImportViewProps) {
   const isAdmin = currentUser.role === 'Admin';
   const [importType, setImportType] = useState<'EstoqueDiario' | 'BasePrincipal'>('EstoqueDiario');
@@ -766,15 +771,97 @@ export default function ImportView({
     }
   };
 
+  const handleClearAllProducts = () => {
+    if (confirm(`Atenção: Deseja REALMENTE apagar TODOS os ${products.length} produtos do catálogo atual?\n\nIsso limpará completamente os dados salvos da Planilha Base e do Estoque Diário, permitindo importar uma nova Planilha Base limpa sem duplicatas.`)) {
+      setProducts([]);
+      onUpdateStats(new Date().toISOString());
+      setImportLog({
+        status: 'success',
+        message: 'Base de produtos zerada com sucesso! Você pode importar a Planilha Base novamente agora.'
+      });
+    }
+  };
+
+  const handleResetStockDataOnly = () => {
+    if (confirm(`Deseja zerar os saldos de estoque diário de todos os ${products.length} produtos?\n\nOs cadastros do catálogo e indústrias serão mantidos, mas as quantidades de estoque, valor disponível, sem venda e idade serão zeradas.`)) {
+      const resetProds = products.map(p => ({
+        ...p,
+        estoque: 0,
+        estoqueFormatado: '0',
+        valorDisponivel: 0,
+        semVenda: 0,
+        idade: 0
+      }));
+      setProducts(resetProds);
+      onUpdateStats(new Date().toISOString());
+      setImportLog({
+        status: 'success',
+        message: 'Dados de estoque diário zerados com sucesso! Você pode importar a planilha de Estoque Diário novamente.'
+      });
+    }
+  };
+
   return (
     <div className="space-y-6" id="import-tab">
       
-      {/* Title */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 font-display">Central de Importação de Planilhas</h2>
-        <p className="text-xs text-gray-500 mt-1">
-          Alimente a Base Principal de produtos ou realize o balanço diário de estoque copiando e colando colunas diretamente do Excel.
-        </p>
+      {/* Header & Data Cleaning Action Bar */}
+      <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 font-display flex items-center gap-2">
+            Central de Importação de Planilhas
+          </h2>
+          <p className="text-xs text-gray-500 mt-1">
+            Alimente a Base Principal de produtos ou realize o balanço diário de estoque copiando e colando colunas do Excel.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-3 text-[11px] font-medium text-gray-600">
+            <span className="bg-gray-100 px-2.5 py-1 rounded-lg text-gray-700 font-mono">
+              Produtos no Catálogo: <strong className="text-gray-900 font-bold">{products.length}</strong>
+            </span>
+            <span className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg font-mono">
+              Com Estoque Disponível: <strong className="text-emerald-900 font-bold">{products.filter(p => (p.estoque || 0) > 0).length}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Data Reset/Clear Buttons */}
+        {isAdmin && (
+          <div className="flex flex-wrap items-center gap-2 border-t lg:border-t-0 pt-3 lg:pt-0 border-gray-100">
+            <button
+              onClick={handleClearAllProducts}
+              disabled={products.length === 0}
+              className="px-3.5 py-2 bg-red-50 hover:bg-red-100 disabled:opacity-40 text-red-700 border border-red-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs"
+              title="Apaga todos os cadastros e estoques para importar uma Planilha Base do zero"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-red-600" />
+              Limpar Todos os Produtos
+            </button>
+
+            <button
+              onClick={handleResetStockDataOnly}
+              disabled={products.length === 0}
+              className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 disabled:opacity-40 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs"
+              title="Zera apenas as quantidades de estoque mantendo os cadastros de produtos"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+              Zerar Apenas Estoques
+            </button>
+
+            {onResetDatabase && (
+              <button
+                onClick={() => {
+                  if (confirm('Atenção: Esta ação irá apagar TODOS os produtos, fornecedores, históricos e dados operacionais. Deseja realmente resetar o sistema por completo?')) {
+                    onResetDatabase();
+                  }
+                }}
+                className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs"
+                title="Restaura o sistema por completo"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-gray-600" />
+                Reset Geral
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

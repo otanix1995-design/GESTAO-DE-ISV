@@ -573,6 +573,7 @@ export default function App() {
             impHistory={impHistory}
             setImpHistory={setImpHistory}
             onUpdateStats={handleUpdateStatsTimeline}
+            onResetDatabase={handleResetDatabase}
           />
         );
       case 'base_principal':
