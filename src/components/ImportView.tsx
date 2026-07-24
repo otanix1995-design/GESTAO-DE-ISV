@@ -24,26 +24,40 @@ import { motion } from 'motion/react';
 
 function splitRowColumns(row: string): string[] {
   if (!row) return [];
-  const trimmedRow = row.trim();
-  if (!trimmedRow) return [];
+  const trimmed = row.trim();
+  if (!trimmed) return [];
 
-  if (trimmedRow.includes('\t')) {
-    return trimmedRow.split('\t').map(c => c.trim().replace(/^"(.*)"$/, '$1').trim());
-  }
-  
-  const delimiter = trimmedRow.includes(';') ? ';' : trimmedRow.includes('|') ? '|' : ',';
-  
-  // Quote-aware splitting for CSV / Semicolon files
-  const regex = new RegExp(`(?:^|${delimiter === ';' ? ';' : delimiter})(?:"([^"]*)"|([^"${delimiter === ';' ? ';' : delimiter}]*))`, 'g');
-  const cols: string[] = [];
-  let match;
-  while ((match = regex.exec(trimmedRow)) !== null) {
-    const val = match[1] !== undefined ? match[1] : match[2];
-    cols.push((val || '').trim());
+  // If tab-separated (from Excel paste)
+  if (trimmed.includes('\t')) {
+    return trimmed.split('\t').map(c => c.trim().replace(/^"(.*)"$/, '$1').trim());
   }
 
-  if (cols.length > 0) return cols;
-  return trimmedRow.split(delimiter).map(c => c.trim().replace(/^"(.*)"$/, '$1').trim());
+  const delimiter = trimmed.includes(';') ? ';' : trimmed.includes('|') ? '|' : ',';
+  
+  // Character-by-character parser to avoid regex infinite loops
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (char === '"') {
+      if (inQuotes && i + 1 < trimmed.length && trimmed[i + 1] === '"') {
+        current += '"';
+        i++; // skip escaped quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      result.push(current.trim().replace(/^"(.*)"$/, '$1').trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim().replace(/^"(.*)"$/, '$1').trim());
+
+  return result;
 }
 
 interface MappingIndices {
@@ -54,15 +68,15 @@ interface MappingIndices {
   iNomeIndustria: number;
 }
 
-function findHeaderRow(lines: string[]): { headerRowIndex: number; rawHeaders: string[]; normalizedHeaders: string[] } {
+function findHeaderRowInRows(rows: string[][]): { headerRowIndex: number; rawHeaders: string[]; normalizedHeaders: string[] } {
   const headerKeywords = [
     'codigo', 'cod', 'ean', 'produto', 'sku', 'desc', 'descricao', 'descricaomercadoria', 
     'embalagem', 'emb', 'complemento', 'fornecedor', 'razao', 'razaosocial', 'industria', 
     'nomeindustria', 'cnpj', 'custo', 'customedio', 'semvenda', 'valordisponivel', 'estoque', 'idade'
   ];
 
-  for (let i = 0; i < Math.min(lines.length, 10); i++) {
-    const cols = splitRowColumns(lines[i]);
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const cols = rows[i] || [];
     const normalized = cols.map(h => 
       String(h || '')
         .toLowerCase()
@@ -72,7 +86,7 @@ function findHeaderRow(lines: string[]): { headerRowIndex: number; rawHeaders: s
     );
 
     const matches = normalized.filter(col => headerKeywords.some(kw => col.includes(kw)));
-    if (matches.length >= 2 || (lines.length === 1 && matches.length >= 1)) {
+    if (matches.length >= 2 || (rows.length === 1 && matches.length >= 1)) {
       return {
         headerRowIndex: i,
         rawHeaders: cols,
@@ -251,76 +265,81 @@ export default function ImportView({
 
   const handleFileUpload = (file: File) => {
     if (!file) return;
+    setImportLog({
+      status: 'idle',
+      message: 'Lendo e processando planilha...'
+    });
+
     const reader = new FileReader();
     reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
-        
-        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
-          throw new Error('Nenhuma aba encontrada no arquivo de planilha.');
-        }
-
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Convert sheet to 2D array
-        const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
-        
-        if (!json || json.length === 0) {
-          setImportLog({
-            status: 'error',
-            message: 'Não foi possível encontrar dados válidos na primeira aba da planilha Excel.'
-          });
-          return;
-        }
-        
-        // Convert the 2D array into a tab-separated text block
-        const stringRows = json
-          .map(row => (Array.isArray(row) ? row : []).map(cell => {
-            if (cell === null || cell === undefined) return '';
-            return String(cell).trim();
-          }).join('\t'))
-          .filter(rowText => rowText.replace(/\t/g, '').trim().length > 0);
-
-        if (stringRows.length === 0) {
-          setImportLog({
-            status: 'error',
-            message: 'A planilha selecionada está vazia.'
-          });
-          return;
-        }
-
-        const textData = stringRows.join('\n');
-        setPasteData(textData);
-
-        // Auto detect import type from content
-        const lowerData = textData.toLowerCase();
-        let targetType = importType;
-        
-        if (lowerData.includes('cnpj') || lowerData.includes('razao') || lowerData.includes('fornecedor') || lowerData.includes('razaosocial')) {
-          if (!lowerData.includes('dias sem venda') && !lowerData.includes('valordisponivel') && !lowerData.includes('valor disponivel')) {
-            targetType = 'BasePrincipal';
-            setImportType('BasePrincipal');
+      // Use setTimeout to yield execution so React can render the loading message
+      setTimeout(() => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+          
+          if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+            throw new Error('Nenhuma aba encontrada no arquivo de planilha.');
           }
-        } else if (lowerData.includes('estoque') || lowerData.includes('valor disponivel') || lowerData.includes('sem venda')) {
-          targetType = 'EstoqueDiario';
-          setImportType('EstoqueDiario');
-        }
 
-        // Execute import directly!
-        executeImportData(textData, targetType, file.name);
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Convert sheet to 2D array of string cells
+          const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
+          
+          if (!json || json.length === 0) {
+            setImportLog({
+              status: 'error',
+              message: 'Não foi possível encontrar dados válidos na primeira aba da planilha Excel.'
+            });
+            return;
+          }
+          
+          const parsedRows: string[][] = json
+            .map(row => (Array.isArray(row) ? row : []).map(cell => (cell === null || cell === undefined) ? '' : String(cell).trim()))
+            .filter(row => row.some(c => c.length > 0));
 
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
+          if (parsedRows.length === 0) {
+            setImportLog({
+              status: 'error',
+              message: 'A planilha selecionada está vazia.'
+            });
+            return;
+          }
+
+          // Populate pasteData textarea with sample rows (up to 500 lines) for display without DOM lag
+          const sampleText = parsedRows.slice(0, 500).map(r => r.join('\t')).join('\n');
+          setPasteData(sampleText);
+
+          // Auto detect import type from content
+          const sampleFullText = parsedRows.slice(0, 15).map(r => r.join(' ')).join(' ').toLowerCase();
+          let targetType = importType;
+          
+          if (sampleFullText.includes('cnpj') || sampleFullText.includes('razao') || sampleFullText.includes('fornecedor') || sampleFullText.includes('razaosocial')) {
+            if (!sampleFullText.includes('dias sem venda') && !sampleFullText.includes('valordisponivel') && !sampleFullText.includes('valor disponivel')) {
+              targetType = 'BasePrincipal';
+              setImportType('BasePrincipal');
+            }
+          } else if (sampleFullText.includes('estoque') || sampleFullText.includes('valor disponivel') || sampleFullText.includes('sem venda')) {
+            targetType = 'EstoqueDiario';
+            setImportType('EstoqueDiario');
+          }
+
+          // Execute import directly with 2D array!
+          executeImportData(parsedRows, targetType, file.name);
+
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        } catch (error: any) {
+          console.error('File upload error:', error);
+          setImportLog({
+            status: 'error',
+            message: `Erro ao ler a planilha Excel: ${error.message || 'Formato de arquivo corrompido ou incompatível.'}`
+          });
         }
-      } catch (error: any) {
-        console.error('File upload error:', error);
-        setImportLog({
-          status: 'error',
-          message: `Erro ao ler a planilha Excel: ${error.message || 'Formato de arquivo corrompido ou incompatível.'}`
-        });
-      }
+      }, 30);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -388,7 +407,7 @@ export default function ImportView({
   };
 
   const executeImportData = (
-    textToParse: string, 
+    dataToParse: string | string[][], 
     activeImportType: 'EstoqueDiario' | 'BasePrincipal',
     fileNameCustom?: string
   ) => {
@@ -400,25 +419,38 @@ export default function ImportView({
       return;
     }
 
-    if (!textToParse.trim()) {
+    let parsedRows: string[][] = [];
+
+    if (Array.isArray(dataToParse)) {
+      parsedRows = dataToParse
+        .map(row => (Array.isArray(row) ? row : []).map(cell => (cell === null || cell === undefined) ? '' : String(cell).trim()))
+        .filter(row => row.some(cell => cell.length > 0));
+    } else {
+      if (!dataToParse.trim()) {
+        setImportLog({
+          status: 'error',
+          message: 'Área de transferência vazia. Por favor, cole os dados delimitados da planilha ou selecione um arquivo.'
+        });
+        return;
+      }
+      const lines = dataToParse.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
+      parsedRows = lines.map(line => splitRowColumns(line)).filter(row => row.some(cell => cell.length > 0));
+    }
+
+    if (parsedRows.length < 1) {
       setImportLog({
         status: 'error',
-        message: 'Área de transferência vazia. Por favor, cole os dados delimitados da planilha ou selecione um arquivo.'
+        message: 'A planilha enviada não possui dados válidos.'
       });
       return;
     }
 
     try {
-      const lines = textToParse.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
-      if (lines.length < 1) {
-        throw new Error('A planilha está vazia.');
-      }
-
       // Find header row using keyword matching in first 10 lines
-      const { headerRowIndex, rawHeaders, normalizedHeaders } = findHeaderRow(lines);
+      const { headerRowIndex, rawHeaders, normalizedHeaders } = findHeaderRowInRows(parsedRows);
       const hasHeaders = headerRowIndex !== -1;
 
-      const rows = hasHeaders ? lines.slice(headerRowIndex + 1) : lines;
+      const dataRows = hasHeaders ? parsedRows.slice(headerRowIndex + 1) : parsedRows;
 
       const getColIndex = (aliases: string[], fallbackIndex: number): number => {
         if (!hasHeaders) return fallbackIndex;
@@ -439,6 +471,22 @@ export default function ImportView({
       
       const updatedProductsList = [...products];
 
+      // Build Map indexes for lightning fast O(1) product lookups (prevents browser freezing on large lists)
+      const codeToIndexMap = new Map<string, number>();
+      const descToIndexMap = new Map<string, number>();
+
+      updatedProductsList.forEach((p, idx) => {
+        if (p.codigo) {
+          codeToIndexMap.set(p.codigo, idx);
+          const norm = normalizeProductCode(p.codigo);
+          if (norm) codeToIndexMap.set(norm, idx);
+        }
+        if (p.descricao) {
+          const normDesc = p.descricao.trim().toLowerCase();
+          if (normDesc) descToIndexMap.set(normDesc, idx);
+        }
+      });
+
       if (activeImportType === 'EstoqueDiario') {
         const iCodigo = getColIndex(['codigo', 'cod', 'ean', 'produto', 'sku', 'codproduto', 'codigoitem'], 0);
         const iDescricao = getColIndex(['descricaomercadoria', 'descricao', 'mercadoria', 'desc', 'descricaomercadorias', 'nomeproduto'], 1);
@@ -454,8 +502,7 @@ export default function ImportView({
           outputLog.push(`Nenhum cabeçalho explícito encontrado. Usando mapeamento de colunas padrão.`);
         }
 
-        rows.forEach((row) => {
-          const cols = splitRowColumns(row);
+        dataRows.forEach((cols) => {
           if (cols.length < 1) return;
 
           const rawCodigo = cols[iCodigo];
@@ -474,18 +521,16 @@ export default function ImportView({
           const semVenda = Math.max(0, parseInt(cols[iSemVenda], 10) || 0);
           const idade = Math.max(0, parseInt(cols[iIdade], 10) || 0);
 
-          let existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo || normalizeProductCode(p.codigo) === codigo);
-          
-          if (existingIndex === -1 && descricao) {
-            const normDesc = descricao.trim().toLowerCase();
-            existingIndex = updatedProductsList.findIndex(p => p.descricao && p.descricao.trim().toLowerCase() === normDesc);
+          let existingIndex = codeToIndexMap.get(codigo);
+          if (existingIndex === undefined && descricao) {
+            existingIndex = descToIndexMap.get(descricao.trim().toLowerCase());
           }
 
-          if (existingIndex !== -1) {
+          if (existingIndex !== undefined) {
             const existing = updatedProductsList[existingIndex];
             const updated: Product = {
               ...existing,
-              codigo: normalizeProductCode(existing.codigo) || codigo,
+              codigo: existing.codigo || codigo,
               estoque,
               estoqueFormatado: rawEstoque.trim() || existing.estoqueFormatado,
               valorDisponivel,
@@ -525,7 +570,11 @@ export default function ImportView({
               semVenda,
               idade
             };
+
+            const newIdx = updatedProductsList.length;
             updatedProductsList.push(newProduct);
+            codeToIndexMap.set(codigo, newIdx);
+            if (descricao) descToIndexMap.set(descricao.trim().toLowerCase(), newIdx);
             insertedCount++;
           }
         });
@@ -546,11 +595,9 @@ export default function ImportView({
           iEmbalagem: getColIndex(['embalagem', 'emb', 'embalagens', 'complemento', 'compl'], 4)
         };
 
-        const parsedRows = rows.map(row => splitRowColumns(row)).filter(r => r.length > 0 && r.some(cell => cell.trim().length > 0));
-
         let finalMapping = fallbackMapping;
         if (!hasHeaders) {
-          finalMapping = detectBasePrincipalColumns(parsedRows, fallbackMapping);
+          finalMapping = detectBasePrincipalColumns(dataRows, fallbackMapping);
         }
 
         const iCodigo = finalMapping.iCodigo;
@@ -569,7 +616,7 @@ export default function ImportView({
         const updatedSuppliersList = [...suppliers];
         let newSuppliersCount = 0;
 
-        parsedRows.forEach((cols) => {
+        dataRows.forEach((cols) => {
           if (cols.length < 1) return;
 
           const rawCodigo = iCodigo >= 0 ? cols[iCodigo] : '';
@@ -599,13 +646,12 @@ export default function ImportView({
             }
           }
 
-          let existingIndex = updatedProductsList.findIndex(p => p.codigo === codigo || normalizeProductCode(p.codigo) === codigo);
-          if (existingIndex === -1 && descricao) {
-            const normDesc = descricao.trim().toLowerCase();
-            existingIndex = updatedProductsList.findIndex(p => p.descricao && p.descricao.trim().toLowerCase() === normDesc);
+          let existingIndex = codeToIndexMap.get(codigo);
+          if (existingIndex === undefined && descricao) {
+            existingIndex = descToIndexMap.get(descricao.trim().toLowerCase());
           }
 
-          if (existingIndex !== -1) {
+          if (existingIndex !== undefined) {
             const existing = updatedProductsList[existingIndex];
             updatedProductsList[existingIndex] = {
               ...existing,
@@ -629,7 +675,11 @@ export default function ImportView({
               semVenda: 0,
               idade: 0
             };
+
+            const newIdx = updatedProductsList.length;
             updatedProductsList.push(newProduct);
+            codeToIndexMap.set(codigo, newIdx);
+            if (descricao) descToIndexMap.set(descricao.trim().toLowerCase(), newIdx);
             insertedCount++;
           }
         });
@@ -658,7 +708,7 @@ export default function ImportView({
         usuario: currentUser.name,
         tipo: activeImportType,
         nomeArquivo: fileNameUsed,
-        totalLinhas: rows.length,
+        totalLinhas: dataRows.length,
         sucesso: true
       };
 
