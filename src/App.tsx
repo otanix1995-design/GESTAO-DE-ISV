@@ -251,7 +251,7 @@ export default function App() {
         const localTime = Date.parse(lastUpdateTimeRef.current || '2026-06-04T07:30:00Z');
         const serverTime = s.lastUpdateTime ? Date.parse(s.lastUpdateTime) : 0;
 
-        if (serverTime > 0 && localTime > serverTime) {
+        if (serverTime > 0 && localTime >= serverTime) {
           return;
         }
 
@@ -293,7 +293,7 @@ export default function App() {
         const localTime = Date.parse(lastUpdateTimeRef.current || '2026-06-04T07:30:00Z');
         const serverTime = s.lastUpdateTime ? Date.parse(s.lastUpdateTime) : 0;
 
-        if (serverTime > 0 && localTime > serverTime) {
+        if (serverTime > 0 && localTime >= serverTime) {
           return;
         }
 
@@ -353,6 +353,8 @@ export default function App() {
 
     lastLocalChangeTime.current = Date.now();
     const currentTimestamp = new Date().toISOString();
+    lastUpdateTimeRef.current = currentTimestamp;
+    setLastUpdateTime(currentTimestamp);
 
     const payload = {
       products,
