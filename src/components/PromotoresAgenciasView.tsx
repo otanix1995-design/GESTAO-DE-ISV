@@ -29,6 +29,23 @@ interface PromotoresAgenciasProps {
   viewMode?: 'promotores' | 'agencias';
 }
 
+export function formatPhoneNumber(val?: string): string {
+  if (!val) return '';
+  const digits = val.replace(/\D/g, '');
+  if (!digits) return '';
+
+  if (digits.length <= 2) {
+    return `(${digits}`;
+  }
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+}
+
 export default function PromotoresAgenciasView({
   promoters,
   setPromoters,
@@ -57,7 +74,7 @@ export default function PromotoresAgenciasView({
 
   // Add Agency Form State
   const [agencyName, setAgencyName] = useState('');
-  const [agencyCnpj, setAgencyCnpj] = useState('');
+  const [agencySupervisorPhone, setAgencySupervisorPhone] = useState('');
   const [isAddAgencyOpen, setIsAddAgencyOpen] = useState(false);
 
   // Filter lists
@@ -69,10 +86,15 @@ export default function PromotoresAgenciasView({
   }, [promoters, search]);
 
   const filteredAgencies = useMemo(() => {
-    return agencies.filter(a => 
-      a.nome.toLowerCase().includes(search.toLowerCase()) ||
-      (a.cnpj && a.cnpj.includes(search))
-    );
+    const searchClean = search.toLowerCase().trim();
+    const searchDigits = search.replace(/\D/g, '');
+    return agencies.filter(a => {
+      const nameMatch = a.nome.toLowerCase().includes(searchClean);
+      const phone = a.telefoneSupervisor || a.cnpj || '';
+      const phoneDigits = phone.replace(/\D/g, '');
+      const phoneMatch = phone.toLowerCase().includes(searchClean) || (searchDigits.length > 0 && phoneDigits.includes(searchDigits));
+      return nameMatch || phoneMatch;
+    });
   }, [agencies, search]);
 
   // Handle add promoter
@@ -92,7 +114,7 @@ export default function PromotoresAgenciasView({
     const newPromoter: Promoter = {
       nome: promoterName.trim(),
       agencia: promoterAg,
-      contato: promoterPhone.trim() || '(45) 99999-0000',
+      contato: formatPhoneNumber(promoterPhone) || '(45) 99999-0000',
       ativo: true
     };
 
@@ -117,14 +139,16 @@ export default function PromotoresAgenciasView({
       return;
     }
 
+    const formattedSupervisorPhone = formatPhoneNumber(agencySupervisorPhone);
+
     const newAgency: Agency = {
       nome: agencyName.trim(),
-      cnpj: agencyCnpj.trim() || 'Sem CNPJ'
+      telefoneSupervisor: formattedSupervisorPhone || 'Não informado'
     };
 
     setAgencies([...agencies, newAgency]);
     setAgencyName('');
-    setAgencyCnpj('');
+    setAgencySupervisorPhone('');
     setIsAddAgencyOpen(false);
   };
 
@@ -210,7 +234,7 @@ export default function PromotoresAgenciasView({
             placeholder={
               activeTab === 'promotores' 
                 ? "Busque promotores pelo nome ou agência afiliada..."
-                : "Busque agências pelo nome ou CNPJ registrado..."
+                : "Busque agências pelo nome ou número do supervisor..."
             }
             className="text-xs w-full pl-9 pr-4 py-2.5 bg-gray-50 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#F58220]/20"
           />
@@ -278,7 +302,7 @@ export default function PromotoresAgenciasView({
                   <div className="border-t pt-3 flex items-center justify-between text-xs text-gray-500 font-mono">
                     <div className="flex items-center gap-1.5 font-bold">
                       <PhoneCall className="w-3.5 h-3.5 text-gray-400" />
-                      <span>{p.contato || '(45) 99831-2911'}</span>
+                      <span>{formatPhoneNumber(p.contato) || '(45) 99831-2911'}</span>
                     </div>
                   </div>
                 </div>
@@ -294,7 +318,7 @@ export default function PromotoresAgenciasView({
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-400 font-bold uppercase tracking-wider select-none">
                   <th className="p-4">Credencial Agência</th>
-                  <th className="p-4">CNPJ Declarado</th>
+                  <th className="p-4">Número do Supervisor</th>
                   <th className="p-4">Consultores Ativos Associados</th>
                   <th className="p-4 text-center">Status</th>
                   {canManage && <th className="p-4 text-center">Ações</th>}
@@ -310,13 +334,19 @@ export default function PromotoresAgenciasView({
                 ) : (
                   filteredAgencies.map((a) => {
                     const linkedPromoters = promoters.filter(p => p.agencia.toLowerCase() === a.nome.toLowerCase());
+                    const phoneDisplay = formatPhoneNumber(a.telefoneSupervisor || a.cnpj) || 'Não informado';
                     return (
                       <tr key={a.nome} className="hover:bg-gray-50/50 transition-colors">
                         <td className="p-4 font-bold text-gray-900 flex items-center gap-2">
                           <Building2 className="w-4 h-4 text-[#F58220] shrink-0" />
                           <span>{a.nome}</span>
                         </td>
-                        <td className="p-4 font-mono text-gray-500 font-semibold">{a.cnpj || 'Sob-Análise'}</td>
+                        <td className="p-4 font-mono text-gray-700 font-semibold">
+                          <div className="flex items-center gap-1.5">
+                            <PhoneCall className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <span>{phoneDisplay}</span>
+                          </div>
+                        </td>
                         <td className="p-4 font-medium text-gray-600">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-extrabold text-[#2F2F2F] bg-gray-100 px-2 py-0.5 rounded-md text-xs font-mono">{linkedPromoters.length}</span>
@@ -403,7 +433,7 @@ export default function PromotoresAgenciasView({
                 <input
                   type="text"
                   value={promoterPhone}
-                  onChange={(e) => setPromoterPhone(e.target.value)}
+                  onChange={(e) => setPromoterPhone(formatPhoneNumber(e.target.value))}
                   className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono text-xs font-bold"
                   placeholder="(45) 99999-0000"
                 />
@@ -462,14 +492,17 @@ export default function PromotoresAgenciasView({
               </div>
 
               <div>
-                <label className="block font-bold mb-1">CNPJ DA AGÊNCIA PROMOTORA</label>
+                <label className="block font-bold mb-1">NÚMERO DO SUPERVISOR (TELEFONE)</label>
                 <input
                   type="text"
-                  value={agencyCnpj}
-                  onChange={(e) => setAgencyCnpj(e.target.value)}
+                  value={agencySupervisorPhone}
+                  onChange={(e) => setAgencySupervisorPhone(formatPhoneNumber(e.target.value))}
                   className="w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#F58220] font-mono text-xs font-bold"
-                  placeholder="00.000.000/0000-00"
+                  placeholder="(45) 98888-8888"
                 />
+                <p className="text-[10px] text-gray-400 mt-1 font-sans">
+                  Exemplo: <span className="font-mono font-bold">45988888888</span> é formatado como <span className="font-mono font-bold text-gray-600">(45) 98888-8888</span>
+                </p>
               </div>
 
               <div className="flex justify-end gap-3 pt-3 text-xs">

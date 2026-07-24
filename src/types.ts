@@ -47,6 +47,7 @@ export interface Promoter {
 
 export interface Agency {
   nome: string;
+  telefoneSupervisor?: string;
   cnpj?: string;
   promotoresContados?: number;
 }
