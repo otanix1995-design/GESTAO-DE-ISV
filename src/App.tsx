@@ -176,6 +176,7 @@ export default function App() {
         if (metaSnap.exists()) {
           const meta = metaSnap.data();
           const numChunks = meta.numChunks || 0;
+          hasLoadedFirestoreData = true;
           if (numChunks > 0) {
             const chunkPromises = [];
             for (let i = 0; i < numChunks; i++) {
@@ -188,10 +189,9 @@ export default function App() {
                 combinedProducts = combinedProducts.concat(snap.data().products);
               }
             });
-            if (combinedProducts.length > 0) {
-              setProducts(deduplicateProducts(combinedProducts));
-              hasLoadedFirestoreData = true;
-            }
+            setProducts(deduplicateProducts(combinedProducts));
+          } else {
+            setProducts([]);
           }
         }
 
@@ -201,7 +201,7 @@ export default function App() {
           if (res.ok) {
             const resJson = await res.json();
             const s = resJson?.data || initialData;
-            if (Array.isArray(s.products) && s.products.length > 0) setProducts(deduplicateProducts(s.products));
+            if (Array.isArray(s.products)) setProducts(deduplicateProducts(s.products));
             if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
             if (Array.isArray(s.promoters)) setPromoters(s.promoters);
             if (Array.isArray(s.agencies)) setAgencies(s.agencies);
@@ -220,7 +220,7 @@ export default function App() {
           if (res.ok) {
             const resJson = await res.json();
             const s = resJson?.data || initialData;
-            if (Array.isArray(s.products) && s.products.length > 0) setProducts(deduplicateProducts(s.products));
+            if (Array.isArray(s.products)) setProducts(deduplicateProducts(s.products));
             if (Array.isArray(s.suppliers)) setSuppliers(s.suppliers);
             if (Array.isArray(s.promoters)) setPromoters(s.promoters);
             if (Array.isArray(s.agencies)) setAgencies(s.agencies);
@@ -298,7 +298,6 @@ export default function App() {
         }
 
         const numChunks = s.numChunks || 0;
-        const isReset = s.lastUpdateTime === '2026-06-04T07:30:00Z';
 
         if (numChunks > 0) {
           const fetchAllChunks = async () => {
@@ -319,20 +318,18 @@ export default function App() {
                 }
               });
 
-              if (combinedProducts.length > 0) {
-                const cleaned = deduplicateProducts(combinedProducts);
-                setProducts(prev => {
-                  const isSame = JSON.stringify(prev) === JSON.stringify(cleaned);
-                  return isSame ? prev : cleaned;
-                });
-              }
+              const cleaned = deduplicateProducts(combinedProducts);
+              setProducts(prev => {
+                const isSame = JSON.stringify(prev) === JSON.stringify(cleaned);
+                return isSame ? prev : cleaned;
+              });
             } catch (err) {
               console.error("Erro ao carregar chunks de produtos do Firestore:", err);
             }
           };
           fetchAllChunks();
-        } else if (isReset) {
-          setProducts([]);
+        } else {
+          setProducts(prev => prev.length === 0 ? prev : []);
         }
         if (s.lastUpdateTime) {
           setLastUpdateTime(prev => prev === s.lastUpdateTime ? prev : s.lastUpdateTime);
@@ -459,7 +456,7 @@ export default function App() {
       const res = await fetch('/api/data');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.products) && data.products.length > 0) {
+        if (Array.isArray(data.products)) {
           setProducts(deduplicateProducts(data.products));
         }
         if (Array.isArray(data.suppliers)) setSuppliers(data.suppliers);

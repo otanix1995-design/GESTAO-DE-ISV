@@ -113,7 +113,7 @@ export function getSavedData() {
   const lastUpdateTime = localStorage.getItem(KEYS.LAST_UPDATE_TIME) || '2026-06-04T07:30:00Z';
 
   return {
-    products: Array.isArray(products) && products.length > 0 ? products : INITIAL_PRODUCTS,
+    products: Array.isArray(products) ? products : INITIAL_PRODUCTS,
     suppliers: Array.isArray(suppliers) ? suppliers : INITIAL_SUPPLIERS,
     promoters: Array.isArray(promoters) ? promoters : INITIAL_PROMOTERS,
     agencies: Array.isArray(agencies) ? agencies : INITIAL_AGENCIES,
