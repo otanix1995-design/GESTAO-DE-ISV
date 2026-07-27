@@ -408,22 +408,53 @@ export function parseEstoqueString(estoqueStr: string): number {
 
 /**
  * Parses a float string formatted in either standard JS format or Brazilian format (comma decimal).
- * Safely handles R$ symbols, spaces, thousands separators, and single decimals.
+ * Safely handles R$ symbols, non-breaking spaces, thousands separators, and single decimals.
  */
 export function parseBrazilianFloat(val: any): number {
-  if (val === undefined || val === null) return 0;
-  if (typeof val === 'number') return val;
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
   
   let str = String(val).trim();
   if (!str) return 0;
   
-  // Clean currency symbol and whitespace
-  str = str.replace('R$', '').replace(/\s/g, '');
-  
-  // If there's a comma, it's Brazilian formatting
-  if (str.includes(',')) {
-    // Remove dots as thousands separators, then replace comma with dot
-    str = str.replace(/\./g, '').replace(',', '.');
+  // Clean currency symbols, non-breaking spaces and whitespace
+  str = str.replace(/R\$/gi, '').replace(/\s/g, '').replace(/\u00a0/g, '');
+  // Keep digits, dots, commas, minus
+  str = str.replace(/[^\d.,-]/g, '');
+  if (!str) return 0;
+
+  const hasComma = str.includes(',');
+  const hasDot = str.includes('.');
+
+  if (hasComma && hasDot) {
+    const lastComma = str.lastIndexOf(',');
+    const lastDot = str.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      // Brazilian format: e.g. "262.891,41" or "1.262.891,41"
+      // Remove all dots (thousands separators), replace comma with dot
+      str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      // US format: e.g. "262,891.41" or "1,262,891.41"
+      // Remove all commas (thousands separators)
+      str = str.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    // Only comma present
+    const commaCount = (str.match(/,/g) || []).length;
+    if (commaCount > 1) {
+      // e.g. "262,891,410" -> thousands separators
+      str = str.replace(/,/g, '');
+    } else {
+      // e.g. "262891,41" or "262,89" -> decimal comma
+      str = str.replace(',', '.');
+    }
+  } else if (hasDot) {
+    // Only dot present
+    const dotCount = (str.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      // e.g. "262.891.410" -> thousands separators in BR format
+      str = str.replace(/\./g, '');
+    }
   }
   
   const parsed = parseFloat(str);

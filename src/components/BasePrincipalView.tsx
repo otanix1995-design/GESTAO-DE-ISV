@@ -47,6 +47,7 @@ export default function BasePrincipalView({
   const [selectedPromoterFilter, setSelectedPromoterFilter] = useState<string>('todos');
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>('todos');
   const [selectedAgencyFilter, setSelectedAgencyFilter] = useState<string>('todos');
+  const [selectedPackageFilter, setSelectedPackageFilter] = useState<string>('todos');
 
   // Sorting
   const [sortField, setSortField] = useState<'codigo' | 'descricao' | 'nomeIndustria' | 'custoMedio'>('codigo');
@@ -176,7 +177,12 @@ export default function BasePrincipalView({
       result = result.filter(d => d.agencia === selectedAgencyFilter);
     }
 
-    // 7. Sort elements
+    // 7. Package Filter
+    if (selectedPackageFilter !== 'todos') {
+      result = result.filter(d => d.product.embalagem === selectedPackageFilter);
+    }
+
+    // 8. Sort elements
     result.sort((a, b) => {
       let aVal: any = a.product[sortField as keyof Product] || a[sortField as keyof typeof a] || '';
       let bVal: any = b.product[sortField as keyof Product] || b[sortField as keyof typeof b] || '';
@@ -202,6 +208,7 @@ export default function BasePrincipalView({
     selectedPromoterFilter,
     selectedIndustryFilter,
     selectedAgencyFilter,
+    selectedPackageFilter,
     sortField,
     sortDirection
   ]);
@@ -210,6 +217,8 @@ export default function BasePrincipalView({
   const filterOptions = useMemo(() => {
     const listPromoters = [...new Set(derivedProducts.map(p => p.promotor))].filter(Boolean);
     const listAgencies = [...new Set(derivedProducts.map(p => p.agencia))].filter(Boolean);
+    const listPackages = [...new Set(derivedProducts.map(p => p.product.embalagem).filter(Boolean))];
+    listPackages.sort();
     
     // Collect all distinct industries by CNPJ from both products and suppliers
     const industriesMap = new Map<string, string>();
@@ -244,9 +253,45 @@ export default function BasePrincipalView({
     return {
       promoters: listPromoters,
       agencies: listAgencies,
-      industries: listIndustries
+      industries: listIndustries,
+      packages: listPackages
     };
   }, [products, derivedProducts, suppliers]);
+
+  // Active search query for live text highlighting
+  const activeSearchQuery = (globalSearchQuery || localSearch).trim();
+
+  // Helper to render product description with live green highlighting as the user types
+  const renderHighlightedDescription = (descricao: string, query: string) => {
+    if (!query) return <span className="text-gray-800">{descricao}</span>;
+
+    const q = query.toLowerCase();
+    const descLower = descricao.toLowerCase();
+    const matchIndex = descLower.indexOf(q);
+
+    if (matchIndex !== -1) {
+      // Direct match inside description: highlight matching letters in green
+      const before = descricao.substring(0, matchIndex);
+      const matched = descricao.substring(matchIndex, matchIndex + q.length);
+      const after = descricao.substring(matchIndex + q.length);
+      return (
+        <span className="text-gray-900 font-bold">
+          {before}
+          <mark className="bg-emerald-100 text-emerald-900 px-1 py-0.5 rounded font-black border border-emerald-300 shadow-2xs">
+            {matched}
+          </mark>
+          {after}
+        </span>
+      );
+    }
+
+    // Match found by product code / CNPJ / industry / etc.: highlight description in green container
+    return (
+      <span className="text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md font-extrabold inline-block shadow-2xs">
+        {descricao}
+      </span>
+    );
+  };
 
   // Paginated Slicing
   const paginatedData = useMemo(() => {
@@ -442,6 +487,20 @@ export default function BasePrincipalView({
                 ))}
               </select>
             </div>
+
+            {/* Filter Packaging */}
+            <div>
+              <select
+                className="text-xs bg-gray-50 border rounded-xl px-3 py-2.5 text-gray-700 font-medium focus:outline-none focus:ring-1 focus:ring-[#F58220]"
+                value={selectedPackageFilter}
+                onChange={(e) => { setSelectedPackageFilter(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="todos">Embalagem: Todas</option>
+                {filterOptions.packages.map(emb => (
+                  <option key={emb} value={emb}>{emb}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -510,7 +569,9 @@ export default function BasePrincipalView({
                   return (
                     <tr key={d.product.codigo} className="hover:bg-gray-50/50 transition-colors">
                       <td className="p-4 font-mono font-bold text-gray-900">{d.product.codigo}</td>
-                      <td className="p-4 font-bold text-gray-800 tracking-tight max-w-[280px] break-words">{d.product.descricao}</td>
+                      <td className="p-4 tracking-tight max-w-[280px] break-words">
+                        {renderHighlightedDescription(d.product.descricao, activeSearchQuery)}
+                      </td>
                       <td className="p-4 font-medium text-gray-500 font-mono">{d.product.embalagem}</td>
                       <td className="p-4">
                         <div className="space-y-0.5">
