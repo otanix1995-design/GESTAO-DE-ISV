@@ -1423,8 +1423,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                             <th className="pb-3 pr-2 text-center">Estoque Total</th>
                             <th className="pb-3 pr-2 text-center">Inativo (SemVenda)</th>
                             <th className="pb-3 pr-2 text-center">Idade</th>
-                            <th className="pb-3 pr-3">Agência</th>
                             <th className="pb-3 pr-3">Promotor Responsável</th>
+                            <th className="pb-3 pr-3">Agência</th>
                             {!isPromotor && <th className="pb-3 text-right text-indigo-600 font-extrabold">Valor Total</th>}
                           </tr>
                         </thead>
@@ -1438,8 +1438,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                               <td className="py-3 pr-2 text-center font-mono font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                               <td className="py-3 pr-2 text-center font-mono text-gray-600">{p.product?.semVenda ?? 0}d</td>
                               <td className="py-3 pr-2 text-center font-mono text-gray-600">{p.product?.idade ?? 0}d</td>
-                              <td className="py-3 pr-3 font-medium text-gray-700 truncate max-w-[120px]">{p.agencia}</td>
                               <td className="py-3 pr-3 font-bold text-indigo-600 truncate max-w-[140px]">{p.promotor}</td>
+                              <td className="py-3 pr-3 font-medium text-gray-700 truncate max-w-[120px]">{p.agencia}</td>
                               {!isPromotor && (
                                 <td className="py-3 text-right text-indigo-600 font-mono font-black text-[13px]">
                                   R$ {(typeof p.valorEstoque === 'number' && !isNaN(p.valorEstoque) ? p.valorEstoque : Number(p.product?.valorDisponivel) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1548,8 +1548,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                           <th className="p-2 border border-gray-300">Descrição do SKU</th>
                           <th className="p-2 border border-gray-300 w-24">Setor</th>
                           <th className="p-2 border border-gray-300">Indústria / Fabricante</th>
-                          <th className="p-2 border border-gray-300 font-bold">Agência</th>
                           <th className="p-2 border border-gray-300 font-bold">Promotor Responsável</th>
+                          <th className="p-2 border border-gray-300 font-bold">Agência</th>
                           <th className="p-2 border border-gray-300 text-right w-20">Qtd. Estoque</th>
                           {!isPromotor && <th className="p-2 border border-gray-300 text-right w-24">Custo Médio</th>}
                           {!isPromotor && <th className="p-2 border border-gray-300 text-right w-28">Valor Total Estoque</th>}
@@ -1579,8 +1579,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                                 </span>
                               </td>
                               <td className="p-2 border border-gray-300 text-gray-700 font-medium truncate max-w-[130px]">{p.nomeIndustria}</td>
-                              <td className="p-2 border border-gray-300 font-bold text-gray-700 truncate max-w-[110px]">{p.agencia}</td>
                               <td className="p-2 border border-gray-300 font-bold text-[#F58220] truncate max-w-[120px]">{p.promotor}</td>
+                              <td className="p-2 border border-gray-300 font-bold text-gray-700 truncate max-w-[110px]">{p.agencia}</td>
                               <td className="p-2 border border-gray-300 text-right font-mono font-semibold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                               {!isPromotor && <td className="p-2 border border-gray-300 text-right font-mono text-gray-600 font-medium">R$ {p.product?.custoMedio?.toFixed(2)}</td>}
                               {!isPromotor && (
@@ -1694,8 +1694,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                   <th className="p-2.5 border border-gray-300 text-center">Estoque Total</th>
                   <th className="p-2.5 border border-gray-300 text-center">Inativo (SemVenda)</th>
                   <th className="p-2.5 border border-gray-300 text-center">Idade (Dias)</th>
-                  <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                   <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                  <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                   <th className="p-2.5 border border-gray-300 text-right">Valor Total</th>
                   <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                 </tr>
@@ -1705,11 +1705,11 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                   <th className="p-2.5 border border-gray-300">Descrição</th>
                   <th className="p-2.5 border border-gray-300">Setor</th>
                   <th className="p-2.5 border border-gray-300 font-bold">Indústria / Fabricante</th>
-                  <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                   <th className="p-2.5 border border-gray-300 text-center">Estoque</th>
                   <th className="p-2.5 border border-gray-300 text-center font-mono">Dias sem venda</th>
                   <th className="p-2.5 border border-gray-300 text-right">Valor Disponível</th>
                   <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                  <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                 </tr>
               )}
             </thead>
@@ -1726,8 +1726,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                       <td className="p-2 border border-gray-300 text-center font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                       <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{p.product?.semVenda ?? 0}d</td>
                       <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{p.product?.idade ?? 0}d</td>
-                      <td className="p-2 border border-gray-300 font-bold text-gray-800">{p.agencia}</td>
                       <td className="p-2 border border-gray-300 font-bold text-indigo-600">{p.promotor}</td>
+                      <td className="p-2 border border-gray-300 font-bold text-gray-800">{p.agencia}</td>
                       <td className="p-2 border border-gray-300 text-right font-mono font-bold text-indigo-600">
                         R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
@@ -1749,13 +1749,13 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                     <td className="p-2 border border-gray-300 font-bold text-gray-900">{formatProductDesc(desc)}</td>
                     <td className="p-2 border border-gray-300 text-gray-700 font-medium">{sectorLabel}</td>
                     <td className="p-2 border border-gray-300 text-gray-700 font-medium">{p.nomeIndustria}</td>
-                    <td className="p-2 border border-gray-300 font-bold text-gray-800">{p.agencia}</td>
                     <td className="p-2 border border-gray-300 text-center font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
                     <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{p.product?.semVenda} dias</td>
                     <td className="p-2 border border-gray-300 text-right text-[#F58220] font-mono font-bold">
                       R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="p-2 border border-gray-300 font-bold text-[#F58220]">{p.promotor}</td>
+                    <td className="p-2 border border-gray-300 font-bold text-gray-800">{p.agencia}</td>
                   </tr>
                 );
               })}

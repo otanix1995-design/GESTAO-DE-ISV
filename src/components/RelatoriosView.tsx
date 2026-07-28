@@ -787,8 +787,8 @@ export default function RelatoriosView({
                       </th>
                     )}
                     <th className="p-2.5 border border-gray-300">Razão Social (Indústria)</th>
-                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
                 )}
@@ -799,8 +799,8 @@ export default function RelatoriosView({
                     <th className="p-2.5 border border-gray-300 text-center">Estoque Total</th>
                     <th className="p-2.5 border border-gray-300 text-center">Inativo (SemVenda)</th>
                     <th className="p-2.5 border border-gray-300 text-center">Idade (Dias)</th>
-                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
                 )}
@@ -810,8 +810,8 @@ export default function RelatoriosView({
                     <th className="p-2.5 border border-gray-300 text-center">Estoque Total</th>
                     <th className="p-2.5 border border-gray-300 text-center">Idade (Dias)</th>
                     <th className="p-2.5 border border-gray-300 font-bold">Indústria / Fabricante</th>
-                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300 font-bold">Promotor Autorizado</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
                 )}
@@ -819,8 +819,8 @@ export default function RelatoriosView({
                 {activeReport === 'agencia' && (
                   <>
                     <th className="p-2.5 border border-gray-300 font-bold">Indústria Fabricante</th>
-                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300 font-bold">Promotor Relacionado</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300">Dias Visita</th>
                     <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
@@ -832,8 +832,8 @@ export default function RelatoriosView({
                     <th className="p-2.5 border border-gray-300 text-center">Idade (Dias)</th>
                     {!hideFinancialValues && <th className="p-2.5 border border-gray-300 text-right">Custo Unit</th>}
                     {!hideFinancialValues && <th className="p-2.5 border border-gray-300 text-right">Valor Ativo</th>}
-                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                    <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
                     <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
                   </>
                 )}
@@ -874,11 +874,11 @@ export default function RelatoriosView({
                           <td className="p-2 border border-gray-300 font-semibold text-gray-700 max-w-[150px] truncate" title={row.nomeIndustria}>
                             {row.nomeIndustria}
                           </td>
-                          <td className="p-2 border border-gray-300 font-bold text-gray-700 max-w-[120px] truncate" title={row.agencia}>
-                            {row.agencia}
-                          </td>
                           <td className="p-2 border border-gray-300 font-bold text-[#F58220] max-w-[120px] truncate" title={row.promotor}>
                             {row.promotor}
+                          </td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700 max-w-[120px] truncate" title={row.agencia}>
+                            {row.agencia}
                           </td>
                           <td className="p-2 border border-gray-300 text-right">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
@@ -900,8 +900,8 @@ export default function RelatoriosView({
                           <td className="p-2 border border-gray-300 text-center font-mono font-black text-gray-900 bg-gray-50/50">{row.product.estoqueFormatado || row.estoqueTotal}</td>
                           <td className="p-2 border border-gray-300 text-center font-mono text-red-650 font-bold">{row.product.semVenda} dias</td>
                           <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
-                          <td className="p-2 border border-gray-300 font-bold text-gray-700 max-w-[120px] truncate" title={row.agencia}>{row.agencia}</td>
                           <td className="p-2 border border-gray-300 font-bold text-[#F58220] max-w-[120px] truncate" title={row.promotor}>{row.promotor}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700 max-w-[120px] truncate" title={row.agencia}>{row.agencia}</td>
                           <td className="p-2 border border-gray-300 text-right">
                             <span className="font-extrabold text-[10px] uppercase text-gray-700">{row.classificacao}</span>
                           </td>
@@ -914,8 +914,8 @@ export default function RelatoriosView({
                           <td className="p-2 border border-gray-300 text-center font-mono font-bold text-gray-800">{row.product.estoqueFormatado || row.estoqueTotal}</td>
                           <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           <td className="p-2 border border-gray-300 font-bold text-gray-700">{row.nomeIndustria}</td>
-                          <td className="p-2 border border-gray-300 font-bold text-gray-700">{row.agencia}</td>
                           <td className="p-2 border border-gray-300 font-extrabold text-[#F58220]">{row.promotor}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700">{row.agencia}</td>
                           <td className="p-2 border border-gray-300 text-right font-black uppercase text-[9px]">{row.classificacao}</td>
                         </>
                       )}
@@ -924,8 +924,8 @@ export default function RelatoriosView({
                       {activeReport === 'agencia' && (
                         <>
                           <td className="p-2 border border-gray-300 font-bold text-gray-700 max-w-[150px] truncate">{row.nomeIndustria}</td>
-                          <td className="p-2 border border-gray-300 font-bold text-gray-800">{row.agencia}</td>
                           <td className="p-2 border border-gray-300 font-extrabold text-[#2F2F2F]">{row.promotor}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-800">{row.agencia}</td>
                           <td className="p-2 border border-gray-300 font-bold text-[#F58220] tracking-tight">{row.diasAtendimento.join(', ')}</td>
                           <td className="p-2 border border-gray-300 text-right font-black text-[9px]">{row.classificacao}</td>
                         </>
@@ -938,8 +938,8 @@ export default function RelatoriosView({
                           <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{(row.product.idade || 0)} dias</td>
                           {!hideFinancialValues && <td className="p-2 border border-gray-300 text-right font-mono text-gray-600">R$ {row.product.custoMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
                           {!hideFinancialValues && <td className="p-2 border border-gray-300 text-right font-mono font-black text-gray-900 bg-orange-50/20">R$ {row.valorEstoque.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>}
-                          <td className="p-2 border border-gray-300 font-bold text-gray-700">{row.agencia}</td>
                           <td className="p-2 border border-gray-300 font-bold text-[#F58220]">{row.promotor}</td>
+                          <td className="p-2 border border-gray-300 font-bold text-gray-700">{row.agencia}</td>
                           <td className="p-2 border border-gray-300 text-right font-black uppercase text-[9px]">{row.classificacao}</td>
                         </>
                       )}
