@@ -143,8 +143,25 @@ export default function DashboardView({ products, suppliers, promoters, agencies
       .slice(0, 20);
   }, [filteredProducts]);
 
-  // List of products specifically for Abastecer Gôndola print-only PDF layout
+  // List of products specifically for Abastecer Gôndola and Possíveis Ajustes print-only PDF layout
   const printProducts = useMemo(() => {
+    if (selectedCard === 'ajustes') {
+      let list = filteredProducts.filter(p => p.isPossivelAjuste);
+      list = list.filter(p => {
+        const est = p.product?.estoque ?? p.estoqueTotal ?? 0;
+        if (est <= 0) return false;
+        if (modalSearch) {
+          const s = modalSearch.toLowerCase();
+          return (p.product?.codigo || '').toLowerCase().includes(s) ||
+                 (p.product?.descricao || '').toLowerCase().includes(s) ||
+                 p.nomeIndustria.toLowerCase().includes(s) ||
+                 p.promotor.toLowerCase().includes(s);
+        }
+        return true;
+      });
+      return list.sort((a, b) => b.valorEstoque - a.valorEstoque);
+    }
+
     let list = filteredProducts.filter(p => {
       const est = p.product?.estoque ?? p.estoqueTotal ?? 0;
       if (est <= 0) return false;
@@ -199,7 +216,19 @@ export default function DashboardView({ products, suppliers, promoters, agencies
     const abastecer = filteredProducts.filter(p => p.status === 'Abastecer' && !p.isPossivelAjuste).length;
     const normais = filteredProducts.filter(p => p.status === 'Normal' && !p.isPossivelAjuste).length;
     const ajustes = filteredProducts.filter(p => p.isPossivelAjuste).length;
-    const valorTotal = filteredProducts.reduce((acc, curr) => acc + curr.valorEstoque, 0);
+    const valorTotal = filteredProducts.reduce((acc, curr) => acc + (curr.valorEstoque || 0), 0);
+
+    // Products with > 5 days without sale (Anomalias)
+    const anomaliasList = filteredProducts.filter(p => (p.product?.semVenda ?? 0) > 5);
+    const qtdAnomalias = anomaliasList.length;
+    const pctAnomalias = total > 0 ? Math.round((qtdAnomalias / total) * 100) : 0;
+    const valorAnomalias = anomaliasList.reduce((acc, curr) => acc + (curr.valorEstoque || 0), 0);
+
+    // Products with <= 5 days without sale (Saudáveis)
+    const saudaveisList = filteredProducts.filter(p => (p.product?.semVenda ?? 0) <= 5);
+    const qtdSaudaveis = saudaveisList.length;
+    const pctSaudaveis = total > 0 ? Math.round((qtdSaudaveis / total) * 100) : 0;
+    const valorSaudaveis = saudaveisList.reduce((acc, curr) => acc + (curr.valorEstoque || 0), 0);
 
     return {
       total,
@@ -208,7 +237,13 @@ export default function DashboardView({ products, suppliers, promoters, agencies
       abastecer,
       normais,
       ajustes,
-      valorTotal
+      valorTotal,
+      qtdAnomalias,
+      pctAnomalias,
+      valorAnomalias,
+      qtdSaudaveis,
+      pctSaudaveis,
+      valorSaudaveis
     };
   }, [filteredProducts]);
 
@@ -512,52 +547,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
           Operação Prioritária (Valor Estoque ≥ R$ 200,00)
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Total de Rupturas - Double Bento Card in primary brand orange color */}
-          <motion.div 
-            variants={cardVariants} 
-            initial="hidden" 
-            animate="visible" 
-            onClick={() => { setSelectedCard('rupturas'); setModalSearch(''); }}
-            className="bg-[#F58220] text-white p-6 rounded-3xl shadow-xl shadow-[#F58220]/15 flex flex-col justify-between hover:scale-[1.01] active:scale-[0.99] cursor-pointer transition-all duration-300 relative overflow-hidden group col-span-1 md:col-span-2 select-none"
-          >
-            <div className="absolute top-0 right-0 w-36 h-36 bg-white/5 rounded-full -mr-10 -mt-10 group-hover:scale-110 transition-transform duration-500"></div>
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/90 font-sans">Alerta de Ruptura Crítica</span>
-                <span className="text-[9px] bg-white/20 text-white px-2 py-0.5 rounded-full font-bold uppercase">Imediato</span>
-              </div>
-              <div className="text-3xl font-extrabold mt-3 font-display flex items-baseline gap-2">
-                <span className="font-mono text-4xl">{dashboardStats.rupturas}</span>
-                <span className="text-sm font-medium text-white/90 font-sans tracking-normal">Itens com zero estoque</span>
-              </div>
-              <p className="text-[11px] text-white/80 mt-1 font-sans">Ambas embalagens (Fardo e Unitário) zeradas na filial Cascavel.</p>
-            </div>
-            <div className="flex items-center justify-between border-t border-white/10 pt-4 mt-6">
-              <span className="text-[10px] text-orange-100 font-bold group-hover:underline">Ver rupturas críticas em detalhe →</span>
-              <AlertOctagon className="w-6 h-6 text-white animate-bounce" />
-            </div>
-          </motion.div>
-
-          {/* Total de Atenção - Warning Yellow Bento Card */}
-          <motion.div 
-            variants={cardVariants} 
-            initial="hidden" 
-            animate="visible" 
-            onClick={() => { setSelectedCard('atencao'); setModalSearch(''); }}
-            className="bg-[#FFC72C] text-[#2F2F2F] p-6 rounded-3xl shadow-md shadow-amber-200/10 border-2 border-amber-300/30 flex flex-col justify-between hover:scale-[1.01] active:scale-[0.99] cursor-pointer transition-all duration-300 group select-none"
-          >
-            <div>
-              <span className="text-[10px] font-extrabold text-gray-800 uppercase tracking-widest font-sans">Atenção Fracionada</span>
-              <div className="text-3xl font-black mt-2 font-mono">{dashboardStats.atencao}</div>
-              <p className="text-[11px] text-gray-800 mt-1 font-sans">Fardo fechado zerado, restam apenas unidades avulsas na área de venda.</p>
-            </div>
-            <div className="flex items-center justify-between border-t border-black/10 pt-4 mt-6">
-              <span className="text-[10px] text-gray-850 font-bold group-hover:underline">Ver itens em alerta →</span>
-              <AlertTriangle className="w-5 h-5 text-gray-850" />
-            </div>
-          </motion.div>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Total de Abastecer - Clean crisp bento card */}
           <motion.div 
             variants={cardVariants} 
@@ -578,90 +568,81 @@ export default function DashboardView({ products, suppliers, promoters, agencies
               </div>
             </div>
           </motion.div>
-        </div>
-      </div>
 
-      {/* --- EXTRA COMBINED ROW: POSSÍVEIS AJUSTES & FINANCE (Bento Arrangement) --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Possíveis Ajustes - Double Width Bento Card */}
-        <motion.div 
-          variants={cardVariants} 
-          initial="hidden" 
-          animate="visible" 
-          onClick={() => { setSelectedCard('ajustes'); setModalSearch(''); }}
-          className="bg-white p-6 rounded-3xl border-2 border-indigo-50/90 shadow-sm flex flex-col justify-between hover:shadow-md hover:scale-[1.01] active:scale-[0.99] cursor-pointer transition-all duration-300 lg:col-span-2 group select-none"
-        >
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest font-sans">Baixa Relevância Financeira</span>
-              <span className="text-[9px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold">Aproveitável</span>
-            </div>
-            <div className="text-3xl font-black text-[#2F2F2F] tracking-tight mt-2 font-mono">
-              {dashboardStats.ajustes} <span className="text-sm text-gray-400 font-sans font-medium">Possíveis Ajustes</span>
-            </div>
-            <p className="text-[11px] text-gray-500 mt-1.5 font-sans leading-relaxed">
-              Mapeia itens com estoque de baixo valor absoluto (&lt; R$ 200,00). Focado em otimizar e agilizar o trânsito interno sem onerar o capital de giro geral da loja.
-            </p>
-          </div>
-          <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-6">
-            <span className="text-[10px] text-indigo-600 font-bold group-hover:underline">Ver possíveis ajustes em detalhe →</span>
-            <div className="bg-indigo-50 text-indigo-500 p-2.5 rounded-2xl group-hover:bg-indigo-100 transition-colors">
-              <Sliders className="w-5 h-5" />
-            </div>
-          </div>
-        </motion.div>
-
-        {/* --- CONFIDENTIAL FINANCIAL VALUATION DISPLAY (HIDDEN FROM PROMOTOR) --- */}
-        {!isPromotor ? (
+          {/* Possíveis Ajustes - Bento Card */}
           <motion.div 
-            variants={cardVariants}
-            initial="hidden"
-            animate="visible"
-            onClick={() => { setSelectedCard('finance'); setModalSearch(''); }}
-            className="bg-gradient-to-br from-[#2F2F2F] to-[#1F1F1F] text-white rounded-3xl p-6 flex flex-col justify-between shadow-xl shadow-gray-900/10 lg:col-span-2 relative overflow-hidden hover:scale-[1.01] active:scale-[0.99] cursor-pointer transition-all duration-300 group select-none"
+            variants={cardVariants} 
+            initial="hidden" 
+            animate="visible" 
+            onClick={() => { setSelectedCard('ajustes'); setModalSearch(''); }}
+            className="bg-white p-6 rounded-3xl border-2 border-indigo-50/90 shadow-sm flex flex-col justify-between hover:shadow-md hover:scale-[1.01] active:scale-[0.99] cursor-pointer transition-all duration-300 group select-none"
           >
-            <div className="absolute right-0 top-0 w-32 h-32 bg-radial from-[#F58220]/10 to-transparent rounded-full -mt-8 -mr-8"></div>
             <div>
-              <div className="inline-flex items-center gap-1.5 bg-[#F58220]/15 text-[#F58220] px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
-                <DollarSign className="w-3.5 h-3.5" /> Ativo de Giro de Estoque Confidencial
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold text-indigo-400 uppercase tracking-widest font-sans">Baixa Relevância Financeira</span>
+                <span className="text-[9px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold">Aproveitável</span>
               </div>
-              <h3 className="text-3xl font-black text-white font-display mt-3 tracking-tight">
-                R$ {dashboardStats.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </h3>
-              <p className="text-[11px] text-gray-400 mt-2 font-sans leading-relaxed">
-                Representação do valor financeiro de produtos cadastrados, calculando: <code className="text-gray-300 bg-white/5 px-1 py-0.5 rounded">estoque total × custo médio</code> indexado nas importações Cascavel.
+              <div className="text-3xl font-black text-[#2F2F2F] tracking-tight mt-2 font-mono">
+                {dashboardStats.ajustes} <span className="text-sm text-gray-400 font-sans font-medium">Possíveis Ajustes</span>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1.5 font-sans leading-relaxed">
+                Mapeia itens com estoque de baixo valor absoluto (&lt; R$ 200,00). Focado em otimizar e agilizar o trânsito interno sem onerar o capital de giro geral da loja.
               </p>
             </div>
-            
-            <div className="grid grid-cols-2 gap-4 border-t border-white/5 pt-4 mt-6">
-              <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-                <div className="text-[9px] text-gray-500 uppercase font-black">Saudáveis</div>
-                <div className="text-lg font-black text-emerald-400 font-mono">
-                  {Math.round((dashboardStats.normais / (dashboardStats.total || 1)) * 100)}%
-                </div>
-                <div className="text-[9px] text-gray-450">Fração saídas normais</div>
+            <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-6">
+              <span className="text-[10px] text-indigo-600 font-bold group-hover:underline">Ver possíveis ajustes em detalhe →</span>
+              <div className="bg-indigo-50 text-indigo-500 p-2.5 rounded-2xl group-hover:bg-indigo-100 transition-colors">
+                <Sliders className="w-5 h-5" />
               </div>
-
-              <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-                <div className="text-[9px] text-gray-500 uppercase font-black">Anomalias</div>
-                <div className="text-lg font-black text-red-400 font-mono">
-                  {Math.round(((dashboardStats.rupturas + dashboardStats.abastecer + dashboardStats.atencao) / (dashboardStats.total || 1)) * 100)}%
-                </div>
-                <div className="text-[9px] text-gray-450 text-ellipsis overflow-hidden whitespace-nowrap">Rupturas/Abastecimentos</div>
-              </div>
-            </div>
-            
-            <div className="text-right text-[10px] text-[#F58220] font-bold mt-4 group-hover:underline">
-              Ver ranking financeiro completo →
             </div>
           </motion.div>
-        ) : (
-          <div className="bg-[#FFF8F2] border-2 border-dashed border-[#F58220]/20 rounded-3xl p-6 lg:col-span-2 flex flex-col justify-center items-center text-center">
-            <ShieldAlert className="w-8 h-8 text-[#F58220]/75 mb-2" />
-            <span className="text-xs font-bold text-gray-700 font-sans">Bloqueio Operacional de Segurança</span>
-            <p className="text-[11px] text-gray-500 mt-1 max-w-xs font-sans">Ativos, relatórios monetários de compra e custos médios ocultos para proteção de dados corporativos da loja.</p>
-          </div>
-        )}
+
+          {/* --- CONFIDENTIAL FINANCIAL VALUATION DISPLAY (HIDDEN FROM PROMOTOR) --- */}
+          {!isPromotor && (
+            <motion.div 
+              variants={cardVariants}
+              initial="hidden"
+              animate="visible"
+              onClick={() => { setSelectedCard('finance'); setModalSearch(''); }}
+              className="bg-gradient-to-br from-[#2F2F2F] to-[#1F1F1F] text-white rounded-3xl p-6 flex flex-col justify-between shadow-xl shadow-gray-900/10 relative overflow-hidden hover:scale-[1.01] active:scale-[0.99] cursor-pointer transition-all duration-300 group select-none"
+            >
+              <div className="absolute right-0 top-0 w-32 h-32 bg-radial from-[#F58220]/10 to-transparent rounded-full -mt-8 -mr-8"></div>
+              <div>
+                <div className="inline-flex items-center gap-1.5 bg-[#F58220]/15 text-[#F58220] px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
+                  <DollarSign className="w-3.5 h-3.5" /> Ativo de Giro Confidencial
+                </div>
+                <h3 className="text-2xl font-black text-white font-display mt-3 tracking-tight">
+                  R$ {dashboardStats.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </h3>
+                <p className="text-[11px] text-gray-400 mt-2 font-sans leading-relaxed">
+                  Soma da coluna <span className="text-orange-400 font-semibold">VALOR DISPONÍVEL</span> dos produtos filtrados.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 border-t border-white/5 pt-4 mt-6">
+                <div className="bg-white/5 rounded-2xl p-2.5 border border-white/5">
+                  <div className="text-[9px] text-emerald-400 uppercase font-black">Saudáveis (≤ 5d Sem Venda)</div>
+                  <div className="text-base font-black text-emerald-400 font-mono mt-0.5">
+                    {dashboardStats.pctSaudaveis}% <span className="text-[10px] font-sans font-normal text-gray-400">({dashboardStats.qtdSaudaveis})</span>
+                  </div>
+                  <div className="text-[10px] font-mono text-emerald-300 font-bold mt-1">
+                    R$ {dashboardStats.valorSaudaveis.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-2.5 border border-white/5">
+                  <div className="text-[9px] text-red-400 uppercase font-black">Anomalias (&gt; 5d Sem Venda)</div>
+                  <div className="text-base font-black text-red-400 font-mono mt-0.5">
+                    {dashboardStats.pctAnomalias}% <span className="text-[10px] font-sans font-normal text-gray-400">({dashboardStats.qtdAnomalias})</span>
+                  </div>
+                  <div className="text-[10px] font-mono text-red-300 font-bold mt-1">
+                    R$ {dashboardStats.valorAnomalias.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
       </div>
 
       {/* --- GRAPHICS BENTO GRID --- */}
@@ -924,6 +905,28 @@ export default function DashboardView({ products, suppliers, promoters, agencies
                     >
                       <Printer className="w-4 h-4 text-white" />
                       Imprimir PDF de Abastecimento
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Special Actions inside Baixa Relevância Financeira */}
+              {selectedCard === 'ajustes' && (
+                <div className="mt-4 bg-indigo-50 border border-indigo-200/50 rounded-2xl p-3 flex flex-col lg:flex-row items-center justify-between gap-3 animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <Sliders className="w-5 h-5 text-indigo-600 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-indigo-950 block">Ações de Baixa Relevância Financeira</span>
+                      <span className="text-[10px] text-indigo-700 font-sans">Produtos com estoque e valor total &lt; R$ 200,00 (estoque 0 desconsiderado)</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 w-full lg:w-auto justify-end">
+                    <button
+                      onClick={() => window.print()}
+                      className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer font-sans"
+                    >
+                      <Printer className="w-4 h-4 text-white" />
+                      Imprimir Relatório PDF
                     </button>
                   </div>
                 </div>
@@ -1369,12 +1372,21 @@ export default function DashboardView({ products, suppliers, promoters, agencies
 
               {/* 7. AJUSTES */}
               {selectedCard === 'ajustes' && (() => {
-                const list = filteredProducts.filter(p => p.isPossivelAjuste).filter(p => {
-                  const s = modalSearch.toLowerCase();
-                  return (p.product?.codigo || '').toLowerCase().includes(s) ||
-                         (p.product?.descricao || '').toLowerCase().includes(s) ||
-                         p.nomeIndustria.toLowerCase().includes(s);
-                });
+                const list = filteredProducts
+                  .filter(p => p.isPossivelAjuste && (p.product?.estoque ?? p.estoqueTotal ?? 0) > 0)
+                  .filter(p => {
+                    const s = modalSearch.toLowerCase();
+                    return (p.product?.codigo || '').toLowerCase().includes(s) ||
+                           (p.product?.descricao || '').toLowerCase().includes(s) ||
+                           p.nomeIndustria.toLowerCase().includes(s) ||
+                           p.promotor.toLowerCase().includes(s) ||
+                           p.agencia.toLowerCase().includes(s);
+                  })
+                  .sort((a, b) => {
+                    const valA = typeof a.valorEstoque === 'number' && !isNaN(a.valorEstoque) ? a.valorEstoque : Number(a.product?.valorDisponivel) || 0;
+                    const valB = typeof b.valorEstoque === 'number' && !isNaN(b.valorEstoque) ? b.valorEstoque : Number(b.product?.valorDisponivel) || 0;
+                    return valB - valA;
+                  });
 
                 if (list.length === 0) return <div className="text-center py-12 text-xs text-gray-440">Nenhum possível ajuste no filtro ativo.</div>;
 
@@ -1382,32 +1394,62 @@ export default function DashboardView({ products, suppliers, promoters, agencies
 
                 return (
                   <div className="space-y-4">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
-                          <th className="pb-3 pr-2">Código</th>
-                          <th className="pb-3 pr-4">Descrição do Produto</th>
-                          <th className="pb-3 pr-4">Indústria / Fabricante</th>
-                          <th className="pb-3 pr-2 text-right">Estoque</th>
-                          {!isPromotor && <th className="pb-3 text-right">Valor Financeiro</th>}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50 text-xs">
-                        {slicedList.map(p => (
-                          <tr key={p.product?.codigo} className="hover:bg-indigo-50/10 transition-colors">
-                            <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
-                            <td className="py-3 pr-4">{formatProductDesc(p.product?.descricao || '')}</td>
-                            <td className="py-3 pr-4 text-gray-600 truncate max-w-[180px]">{p.nomeIndustria}</td>
-                            <td className="py-3 pr-2 text-right font-mono text-gray-600">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
-                            {!isPromotor && (
-                              <td className="py-3 text-right text-indigo-500 font-mono font-semibold">
-                                R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                            )}
+                    {/* Control & Filter Header Bar for Baixa Relevância Financeira */}
+                    <div className="bg-indigo-50/70 border border-indigo-200/60 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-extrabold text-indigo-950 uppercase tracking-wide text-[10px] font-sans">Critérios de Exibição:</span>
+                        <span className="bg-white border border-indigo-200 text-indigo-900 text-[11px] font-mono font-bold px-2.5 py-1 rounded-xl shadow-2xs">
+                          Estoque &gt; 0
+                        </span>
+                        <span className="bg-white border border-indigo-200 text-indigo-900 text-[11px] font-mono font-bold px-2.5 py-1 rounded-xl shadow-2xs">
+                          Valor Total &lt; R$ 200,00
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-indigo-900 font-bold text-[11px] bg-white/90 px-3 py-1.5 rounded-xl border border-indigo-200/60 shadow-2xs">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Ordenado por: <strong className="text-indigo-950">Valor Financeiro Total (Maior → Menor)</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-gray-450 text-[10px] font-extrabold uppercase tracking-widest font-sans">
+                            <th className="pb-3 pr-2 text-center w-10">#</th>
+                            <th className="pb-3 pr-2">Cód.</th>
+                            <th className="pb-3 pr-4">Descrição Mercadoria</th>
+                            <th className="pb-3 pr-2 text-center">Emb.</th>
+                            <th className="pb-3 pr-2 text-center">Estoque Total</th>
+                            <th className="pb-3 pr-2 text-center">Inativo (SemVenda)</th>
+                            <th className="pb-3 pr-2 text-center">Idade</th>
+                            <th className="pb-3 pr-3">Agência</th>
+                            <th className="pb-3 pr-3">Promotor Responsável</th>
+                            {!isPromotor && <th className="pb-3 text-right text-indigo-600 font-extrabold">Valor Total</th>}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 text-xs">
+                          {slicedList.map((p, idx) => (
+                            <tr key={p.product?.codigo} className="hover:bg-indigo-50/20 transition-colors">
+                              <td className="py-3 pr-2 text-center font-mono text-gray-400 font-bold text-[11px]">{idx + 1}</td>
+                              <td className="py-3 pr-2 font-mono text-gray-500 font-semibold">{p.product?.codigo}</td>
+                              <td className="py-3 pr-4 font-bold text-gray-800">{formatProductDesc(p.product?.descricao || '')}</td>
+                              <td className="py-3 pr-2 text-center font-mono text-gray-600">{p.product?.embalagem || '-'}</td>
+                              <td className="py-3 pr-2 text-center font-mono font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
+                              <td className="py-3 pr-2 text-center font-mono text-gray-600">{p.product?.semVenda ?? 0}d</td>
+                              <td className="py-3 pr-2 text-center font-mono text-gray-600">{p.product?.idade ?? 0}d</td>
+                              <td className="py-3 pr-3 font-medium text-gray-700 truncate max-w-[120px]">{p.agencia}</td>
+                              <td className="py-3 pr-3 font-bold text-indigo-600 truncate max-w-[140px]">{p.promotor}</td>
+                              {!isPromotor && (
+                                <td className="py-3 text-right text-indigo-600 font-mono font-black text-[13px]">
+                                  R$ {(typeof p.valorEstoque === 'number' && !isNaN(p.valorEstoque) ? p.valorEstoque : Number(p.product?.valorDisponivel) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     {list.length > visibleCount && (
                       <div className="flex justify-center pt-4">
                         <button
@@ -1606,7 +1648,7 @@ export default function DashboardView({ products, suppliers, promoters, agencies
           <div className="space-y-1 print:space-y-0">
             <span className="text-[9px] print:text-[7px] font-bold text-gray-400 uppercase tracking-widest block font-sans">Documento Solicitado</span>
             <span className="font-extrabold text-sm print:text-xs text-gray-850 font-display">
-              Relatório de Abastecimento de Gôndola
+              {selectedCard === 'ajustes' ? 'Relatório de Baixa Relevância Financeira (Possíveis Ajustes)' : 'Relatório de Abastecimento de Gôndola'}
             </span>
           </div>
 
@@ -1631,8 +1673,8 @@ export default function DashboardView({ products, suppliers, promoters, agencies
             <div className="text-gray-400 text-[10px] font-bold uppercase">Volume Total</div>
             <div className="text-lg font-black font-mono mt-0.5 text-gray-800">{printProducts.length} Itens</div>
           </div>
-          <div className="bg-orange-50 text-orange-950 rounded-lg p-3 border border-orange-100">
-            <div className="text-orange-600 text-[10px] font-bold uppercase">Valor Financeiro Disponível</div>
+          <div className={`${selectedCard === 'ajustes' ? 'bg-indigo-50 text-indigo-950 border-indigo-100' : 'bg-orange-50 text-orange-950 border-orange-100'} rounded-lg p-3 border`}>
+            <div className={`${selectedCard === 'ajustes' ? 'text-indigo-600' : 'text-orange-600'} text-[10px] font-bold uppercase`}>Valor Financeiro Disponível</div>
             <div className="text-lg font-black font-mono mt-0.5">
               R$ {printProducts.reduce((acc, curr) => acc + curr.valorEstoque, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
@@ -1643,21 +1685,57 @@ export default function DashboardView({ products, suppliers, promoters, agencies
         <div className="overflow-x-auto border border-gray-300 rounded-2xl">
           <table className="w-full text-left border-collapse border border-gray-300 text-xs">
             <thead>
-              <tr className="bg-gray-100 text-gray-700 font-extrabold uppercase text-[10px] tracking-wide select-none">
-                <th className="p-2.5 border border-gray-300">Código</th>
-                <th className="p-2.5 border border-gray-300">Descrição</th>
-                <th className="p-2.5 border border-gray-300">Setor</th>
-                <th className="p-2.5 border border-gray-300 font-bold">Indústria / Fabricante</th>
-                <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
-                <th className="p-2.5 border border-gray-300 text-center">Estoque</th>
-                <th className="p-2.5 border border-gray-300 text-center font-mono">Dias sem venda</th>
-                <th className="p-2.5 border border-gray-300 text-right">Valor Disponível</th>
-                <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
-              </tr>
+              {selectedCard === 'ajustes' ? (
+                <tr className="bg-gray-100 text-gray-700 font-extrabold uppercase text-[10px] tracking-wide select-none">
+                  <th className="p-2.5 border border-gray-300 text-center w-8">#</th>
+                  <th className="p-2.5 border border-gray-300">Cód.</th>
+                  <th className="p-2.5 border border-gray-300">Descrição Mercadoria</th>
+                  <th className="p-2.5 border border-gray-300 text-center">Emb.</th>
+                  <th className="p-2.5 border border-gray-300 text-center">Estoque Total</th>
+                  <th className="p-2.5 border border-gray-300 text-center">Inativo (SemVenda)</th>
+                  <th className="p-2.5 border border-gray-300 text-center">Idade (Dias)</th>
+                  <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
+                  <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                  <th className="p-2.5 border border-gray-300 text-right">Valor Total</th>
+                  <th className="p-2.5 border border-gray-300 text-right font-bold">Classificação</th>
+                </tr>
+              ) : (
+                <tr className="bg-gray-100 text-gray-700 font-extrabold uppercase text-[10px] tracking-wide select-none">
+                  <th className="p-2.5 border border-gray-300">Código</th>
+                  <th className="p-2.5 border border-gray-300">Descrição</th>
+                  <th className="p-2.5 border border-gray-300">Setor</th>
+                  <th className="p-2.5 border border-gray-300 font-bold">Indústria / Fabricante</th>
+                  <th className="p-2.5 border border-gray-300 font-bold">Agência</th>
+                  <th className="p-2.5 border border-gray-300 text-center">Estoque</th>
+                  <th className="p-2.5 border border-gray-300 text-center font-mono">Dias sem venda</th>
+                  <th className="p-2.5 border border-gray-300 text-right">Valor Disponível</th>
+                  <th className="p-2.5 border border-gray-300 font-bold">Promotor Responsável</th>
+                </tr>
+              )}
             </thead>
             <tbody className="text-xs font-sans">
-              {printProducts.map(p => {
+              {printProducts.map((p, idx) => {
                 const desc = p.product?.descricao || '';
+                if (selectedCard === 'ajustes') {
+                  return (
+                    <tr key={p.product?.codigo} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="p-2 border border-gray-300 text-center font-mono text-gray-500 font-bold">{idx + 1}</td>
+                      <td className="p-2 border border-gray-300 font-mono text-gray-600 font-semibold">{p.product?.codigo}</td>
+                      <td className="p-2 border border-gray-300 font-bold text-gray-900">{formatProductDesc(desc)}</td>
+                      <td className="p-2 border border-gray-300 text-center font-mono">{p.product?.embalagem || '-'}</td>
+                      <td className="p-2 border border-gray-300 text-center font-bold text-gray-800">{p.product?.estoqueFormatado || p.estoqueTotal}</td>
+                      <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{p.product?.semVenda ?? 0}d</td>
+                      <td className="p-2 border border-gray-300 text-center font-mono text-gray-600">{p.product?.idade ?? 0}d</td>
+                      <td className="p-2 border border-gray-300 font-bold text-gray-800">{p.agencia}</td>
+                      <td className="p-2 border border-gray-300 font-bold text-indigo-600">{p.promotor}</td>
+                      <td className="p-2 border border-gray-300 text-right font-mono font-bold text-indigo-600">
+                        R$ {p.valorEstoque?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-2 border border-gray-300 text-right font-bold text-indigo-700">Possível Ajuste</td>
+                    </tr>
+                  );
+                }
+
                 let sectorLabel = 'LOJA';
                 if (desc.toUpperCase().startsWith('RF.')) {
                   sectorLabel = 'FRIOS';

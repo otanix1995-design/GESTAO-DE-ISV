@@ -556,8 +556,8 @@ export function computeProductDerived(product: Product, suppliers: Supplier[], s
   }
 
   // 4. Regra de Ajuste vs Prioridade
-  // Se Valor Estoque < R$ 200,00  => POSSÍVEL AJUSTE (exceto se for Abastecer)
-  const isPossivelAjuste = valorEstoque < 200 && status !== 'Abastecer';
+  // Se Valor Estoque < R$ 200,00 e com ESTOQUE (estoqueTotal > 0) => POSSÍVEL AJUSTE (exceto se for Abastecer)
+  const isPossivelAjuste = estoqueTotal > 0 && valorEstoque < 200 && status !== 'Abastecer';
   const isPrioridadeOperacional = !isPossivelAjuste;
   const classificacao = isPossivelAjuste ? 'Possível Ajuste' : status;
 
